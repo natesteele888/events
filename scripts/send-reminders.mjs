@@ -6,7 +6,7 @@ import nodemailer from "nodemailer";
 import { eventStartMs, dueFor } from "./reminder-logic.mjs";
 
 const E = process.env, DRY = E.REMINDER_DRY_RUN === "1";
-const SITE = (E.SITE_URL || "https://natesteele888.github.io/events/").replace(/\/?$/, "/");
+const SITE = (E.SITE_URL || "https://steele-events.web.app/").replace(/\/?$/, "/");
 const APP = "Steele Events";
 const FROM = E.SMTP_USER;
 if (E.FIRESTORE_EMULATOR_HOST) initializeApp({ projectId: E.GCLOUD_PROJECT || "steele-events-test" });

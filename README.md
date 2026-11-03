@@ -11,7 +11,7 @@ flowchart LR
   G[Guest phone] -->|types the code, RSVPs| FS[(Firestore)]
   H[Host<br/>email or Google sign-in] -->|builds events, reads guest list| FS
   FS -. firestore.rules decide<br/>who can do what .- R[firestore.rules]
-  P[GitHub Pages] --> G
+  P[Firebase Hosting<br/>steele-events.web.app] --> G
   P --> H
   A[GitHub Actions<br/>every hour] -->|finds who's due| FS
   A -->|emails| M[Gmail SMTP]
@@ -58,16 +58,12 @@ Use **Invite list** for anything sensitive: each guest gets a long private link.
 | `.github/workflows/tests.yml` | Runs the rule tests and browser run on every push |
 | `tests/` | `rules.test.mjs` (security rules), `e2e.mjs` (full host and guest run) |
 
-## Going live
+## Live address
 
-Firebase project `steele-events` already exists, with Google sign-in, the GitHub Pages domain and Firestore.
+**https://steele-events.web.app** (Firebase Hosting, free). GitHub Pages stays on only to forward old links.
 
-1. **Turn on email sign-in.** Firebase console → Authentication → Sign-in method → Add new provider → Email/Password → Enable.
-   Leave *Email link* off: on the free plan it's capped at 5 emails a day.
-2. **Set the owner.** Sign in to the app once, copy your User UID from Authentication → Users, and paste it in
-   `firestore.rules` (`PASTE_OWNER_UID`) and `config.js` (`ownerUid`).
-3. **Publish the rules.** Firestore → Rules → replace everything with `firestore.rules` → Publish.
-4. **Turn on the site.** GitHub repo → Settings → Pages → Deploy from a branch → main / root.
+To publish a change, from this folder: `npx firebase-tools deploy --only hosting --project steele-events`.
+Rule changes: `npx firebase-tools deploy --only firestore:rules --project steele-events`.
 
 ## Turning on reminders
 
