@@ -1,0 +1,116 @@
+rules_version = '2';
+// Steele Events security rules.
+// Roles: site owner (you) -> approved hosts -> each event's owner + co-hosts -> guests (no login).
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---- who is who ----------------------------------------------------
+    function signedIn() { return request.auth != null; }
+    function email() { return signedIn() && request.auth.token.email != null ? request.auth.token.email.lower() : ''; }
+    function isSiteOwner() {
+      return signedIn() && request.auth.uid == 'PASTE_OWNER_UID';
+    }
+    function hostDoc() { return /databases/$(database)/documents/hosts/$(request.auth.uid); }
+    function isHost() {
+      return isSiteOwner() || (signedIn() && exists(hostDoc()) && get(hostDoc()).data.status == 'approved');
+    }
+    function eventPath(e) { return /databases/$(database)/documents/events/$(e); }
+    function ev(e) { return get(eventPath(e)).data; }
+    function isEventAdminOf(d) {
+      return isSiteOwner() || (signedIn() && (d.ownerUid == request.auth.uid || email() in d.admins));
+    }
+    function isEventAdmin(e) { return isEventAdminOf(ev(e)); }
+
+    // ---- host access requests ------------------------------------------
+    match /hosts/{uid} {
+      allow get: if signedIn() && (request.auth.uid == uid || isSiteOwner());
+      allow list: if isSiteOwner();
+      // Anyone signed in can ask; only the site owner can approve.
+      allow create: if isSiteOwner() || (signedIn() && request.auth.uid == uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.email == email()
+        && request.resource.data.keys().hasOnly(['email', 'name', 'status', 'requestedAt']));
+      allow update, delete: if isSiteOwner();
+    }
+
+    // ---- events ----------------------------------------------------------
+    match /events/{e} {
+      function validEvent(d) {
+        return d.title is string && d.title.size() > 0 && d.title.size() <= 120
+          && d.ownerUid is string
+          && d.admins is list && d.admins.size() <= 20
+          && d.access in ['open', 'invite']
+          && d.published is bool
+          && d.plusMax is int && d.plusMax >= 0 && d.plusMax <= 20
+          && d.capacity is int && d.capacity >= 0
+          && (!('banner' in d) || d.banner == null || (d.banner is string && d.banner.size() < 900000));
+      }
+      allow get: if resource.data.published == true || isEventAdminOf(resource.data);
+      allow list: if isSiteOwner()
+        || (signedIn() && (resource.data.ownerUid == request.auth.uid || email() in resource.data.admins));
+      allow create: if isHost()
+        && request.resource.data.ownerUid == request.auth.uid
+        && validEvent(request.resource.data);
+      // Co-hosts can edit everything except who owns it and who the co-hosts are.
+      allow update: if isEventAdminOf(resource.data)
+        && validEvent(request.resource.data)
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && (request.resource.data.admins == resource.data.admins
+            || resource.data.ownerUid == request.auth.uid || isSiteOwner());
+      allow delete: if resource.data.ownerUid == request.auth.uid || isSiteOwner();
+
+      // Named guests for invite-only events. Guests can open their own invite by its secret id.
+      match /invites/{i} {
+        allow get: if ev(e).published == true || isEventAdmin(e);
+        allow list, create, update, delete: if isEventAdmin(e);
+      }
+
+      // Running headcount, so capacity can be enforced without guests seeing each other's RSVPs.
+      match /meta/{m} {
+        allow get: if ev(e).published == true || isEventAdmin(e);
+        allow create, update, delete: if isEventAdmin(e)
+          || (m == 'count' && ev(e).published == true && countChangeOk(e));
+      }
+      function countChangeOk(e) {
+        let before = resource == null ? 0 : resource.data.yes;
+        let after = request.resource.data.yes;
+        let limit = ev(e).plusMax + 1;
+        return after is int && after >= 0 && after - before <= limit && before - after <= limit
+          && (ev(e).capacity == 0 || after <= ev(e).capacity)
+          && request.resource.data.keys().hasOnly(['yes']);
+      }
+
+      // RSVPs. The document id is the guest's private key: guests can open and edit
+      // the one they know, but only hosts can list them all.
+      match /rsvps/{r} {
+        function open_() {
+          let d = ev(e);
+          return d.published == true
+            && (!('deadline' in d) || d.deadline == null || request.time < d.deadline);
+        }
+        function countPath() { return /databases/$(database)/documents/events/$(e)/meta/count; }
+        function countBefore() { return exists(countPath()) ? get(countPath()).data.yes : 0; }
+        function heads(x) { return x.attending == true ? x.partySize : 0; }
+        function validRsvp(x) {
+          let d = ev(e);
+          return x.name is string && x.name.size() > 0 && x.name.size() <= 80
+            && x.attending is bool
+            && x.partySize is int
+            && (x.attending == false || (x.partySize >= 1 && x.partySize <= d.plusMax + 1))
+            && (!('note' in x) || (x.note is string && x.note.size() <= 1000))
+            && (!('answers' in x) || x.answers is map)
+            && x.keys().hasOnly(['name', 'attending', 'partySize', 'answers', 'note', 'inviteId', 'createdAt', 'updatedAt'])
+            // invite-only: the RSVP id must be the guest's invite id
+            && (d.access == 'open' || (exists(/databases/$(database)/documents/events/$(e)/invites/$(r)) && x.inviteId == r));
+        }
+        allow get: if true;
+        allow list, delete: if isEventAdmin(e);
+        allow create: if (open_() || isEventAdmin(e)) && validRsvp(request.resource.data)
+          && getAfter(countPath()).data.yes == countBefore() + heads(request.resource.data);
+        allow update: if (open_() || isEventAdmin(e)) && validRsvp(request.resource.data)
+          && request.resource.data.get('inviteId', null) == resource.data.get('inviteId', null)
+          && getAfter(countPath()).data.yes == countBefore() - heads(resource.data) + heads(request.resource.data);
+      }
+    }
+  }
+}

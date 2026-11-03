@@ -1,0 +1,691 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Steele Events</title>
+<meta name="description" content="Invitations and RSVPs for upcoming events.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700;800&family=Permanent+Marker&family=Bebas+Neue&family=Pacifico&family=Fraunces:opsz,wght@9..144,600;9..144,800&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="config.js"></script>
+<style>
+/* App chrome: quiet slate + royal, so each event's own theme is the star */
+:root{
+  --bg:#F3F5FA; --surface:#FFFFFF; --sunk:#E9EDF5; --ink:#14224F; --muted:#5A668A; --line:#D3DAEA;
+  --brand:#1D3FD1; --brand-ink:#FFFFFF; --good:#1E8A5A; --bad:#B3261E; --warn:#A86A00;
+  --f-body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-head:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.5;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+h1,h2,h3{font-family:var(--f-head);margin:0;line-height:1.05;text-wrap:balance}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+[hidden]{display:none!important}
+a{color:var(--brand)}
+.wrap{max-width:1180px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:16px 60px}
+
+/* top bar */
+.top{display:flex;justify-content:space-between;align-items:center;gap:12px;padding-bottom:12px;margin-bottom:18px;border-bottom:1px solid var(--line)}
+.brandmark{font-family:var(--f-head);font-weight:800;font-size:26px;text-transform:uppercase;letter-spacing:.02em;text-decoration:none;color:var(--ink)}
+.brandmark span{color:var(--brand)}
+.who{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--muted);flex-wrap:wrap;justify-content:flex-end}
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:8px 14px;font-weight:600;text-decoration:none;color:var(--ink);font-size:15px}
+.btn:hover{border-color:var(--brand)}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:var(--brand-ink)}
+.btn.danger{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 40%,var(--line))}
+.btn.small{padding:4px 10px;font-size:13px}
+.btn:disabled{opacity:.55;cursor:default}
+.muted{color:var(--muted)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-size:14px;z-index:50;max-width:calc(100% - 32px)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px}
+.empty{text-align:center;padding:40px 20px}
+.empty h2{font-size:30px;margin-bottom:8px}
+.pill{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding:2px 8px;border-radius:5px;border:1px solid currentColor;white-space:nowrap}
+.pill.live{color:var(--good)} .pill.draft{color:var(--muted)}
+
+/* landing */
+.hero{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:28px;align-items:center;margin-top:20px}
+.hero h1{font-size:clamp(40px,7vw,72px);text-transform:uppercase}
+.hero p{font-size:19px;color:var(--muted);max-width:46ch}
+.hero .card-demo{background:linear-gradient(160deg,#0B1D5E,#1D3FD1);color:#fff;border-radius:18px;padding:22px;box-shadow:0 20px 40px rgba(11,29,94,.25)}
+.hero .card-demo .t{font-family:"Permanent Marker",cursive;font-size:34px;line-height:1.1}
+.hero .card-demo .d{opacity:.85;margin-top:6px}
+.hero .card-demo .r{display:flex;gap:8px;margin-top:16px}
+.hero .card-demo .r span{background:rgba(255,255,255,.16);border-radius:8px;padding:6px 12px;font-weight:600}
+
+/* dashboard */
+.dh{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.dh h1{font-size:40px;text-transform:uppercase}
+.evgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:16px}
+.evcard{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column}
+.evcard .ban{height:110px;background:var(--p,#1D3FD1) center/cover no-repeat;position:relative}
+.evcard .ban .pill{position:absolute;top:10px;left:10px;background:rgba(255,255,255,.92)}
+.evcard .body{padding:12px 14px;display:grid;gap:6px;flex:1}
+.evcard h3{font-size:24px}
+.evcard .meta{font-size:14px;color:var(--muted)}
+.evcard .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto;padding-top:6px}
+
+/* builder */
+.builder{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:24px;align-items:start}
+.sec{background:var(--surface);border:1px solid var(--line);border-radius:14px;margin-bottom:14px;overflow:hidden}
+.sec > summary{list-style:none;cursor:pointer;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;font-family:var(--f-head);font-size:22px;font-weight:700;text-transform:uppercase}
+.sec > summary::-webkit-details-marker{display:none}
+.sec > summary small{font-family:var(--f-body);font-size:13px;font-weight:500;text-transform:none;color:var(--muted)}
+.sec .in{padding:0 18px 18px;display:grid;gap:12px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+label.f{display:grid;gap:4px;font-size:13px;font-weight:600;color:var(--muted);min-width:0}
+label.f input,label.f select,label.f textarea,.inp{border:1px solid var(--line);border-radius:8px;background:#fff;padding:8px 10px;font-size:15px;color:var(--ink);font-weight:400;width:100%;min-width:0}
+label.f textarea{min-height:90px;resize:vertical}
+.hint{font-size:13px;color:var(--muted);margin:0}
+.rows{display:grid;gap:8px}
+.row{display:grid;grid-template-columns:110px 1fr auto;gap:8px;align-items:center}
+.qrow{display:grid;grid-template-columns:1fr 130px auto;gap:8px;align-items:start;padding:10px;border:1px solid var(--line);border-radius:10px}
+.qrow .opts{grid-column:1/-1}
+.xbtn{border:0;background:none;color:var(--muted);font-size:13px;padding:6px}
+.xbtn:hover{color:var(--bad)}
+.presets{display:flex;flex-wrap:wrap;gap:8px}
+.preset{border:2px solid var(--line);border-radius:10px;padding:6px 10px 6px 6px;background:#fff;display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
+.preset[aria-pressed="true"]{border-color:var(--brand)}
+.preset i{width:30px;height:30px;border-radius:7px;display:block}
+.colors{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.colors label{display:grid;gap:4px;font-size:12px;font-weight:600;color:var(--muted)}
+.colors input{width:100%;height:40px;border:1px solid var(--line);border-radius:8px;padding:2px;background:#fff}
+.banprev{border:1px dashed var(--line);border-radius:10px;min-height:90px;display:grid;place-items:center;overflow:hidden;background:var(--sunk)}
+.banprev img{display:block;width:100%;height:auto}
+.seg{display:inline-flex;background:var(--sunk);border-radius:10px;padding:3px;gap:3px;flex-wrap:wrap}
+.seg button{border:0;background:transparent;border-radius:8px;padding:7px 14px;font-weight:600}
+.seg button[aria-pressed="true"]{background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.chk{display:flex;gap:8px;align-items:center;font-size:15px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;gap:6px;align-items:center;background:var(--sunk);border-radius:999px;padding:4px 6px 4px 12px;font-size:14px}
+.chip button{border:0;background:#fff;border-radius:50%;width:22px;height:22px;line-height:1;color:var(--muted)}
+.invtable{width:100%;border-collapse:collapse;font-size:14px}
+.invtable td,.invtable th{border-top:1px solid var(--line);padding:7px 6px;text-align:left;vertical-align:middle}
+.invtable th{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border-top:0}
+.savebar{position:sticky;bottom:calc(10px + env(safe-area-inset-bottom,0px));background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;box-shadow:0 10px 30px rgba(20,34,79,.12);z-index:5}
+.previewcol{position:sticky;top:12px}
+.phone{border:10px solid #0f172a;border-radius:34px;overflow:hidden;height:min(760px,78vh);background:#fff;box-shadow:0 20px 40px rgba(20,34,79,.18)}
+.phone .scroller{height:100%;overflow-y:auto}
+.prevlabel{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:700;margin-bottom:8px;display:flex;justify-content:space-between}
+.share{display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:center}
+.share .qr{background:#fff;padding:8px;border-radius:10px;border:1px solid var(--line)}
+.share .qr img,.share .qr canvas{display:block;width:120px;height:120px}
+.linkbox{font-family:ui-monospace,Menlo,monospace;font-size:13px;background:var(--sunk);padding:8px 10px;border-radius:8px;overflow-wrap:anywhere}
+
+/* responses */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.stat b{display:block;font-family:var(--f-head);font-size:38px;line-height:1;font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.tablewrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:12px}
+table.resp{border-collapse:collapse;width:100%;font-size:14px;min-width:640px}
+table.resp th,table.resp td{padding:9px 12px;border-top:1px solid var(--line);text-align:left;vertical-align:top}
+table.resp th{border-top:0;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);background:var(--sunk)}
+.yes{color:var(--good);font-weight:700}.no{color:var(--muted);font-weight:700}
+.tallies{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:16px 0}
+.tally .bar{display:grid;grid-template-columns:110px 1fr 34px;gap:8px;align-items:center;font-size:14px;margin-top:6px}
+.tally .bar i{display:block;height:10px;border-radius:5px;background:var(--brand)}
+.tally .bar em{font-style:normal;text-align:right;font-variant-numeric:tabular-nums}
+
+/* ---------- the invitation (themed per event) ---------- */
+.inv{--p:#0B1D5E;--a:#3A63FF;--b:#E9F0FF;--t:#14224F;--hf:"Permanent Marker",cursive;
+  background:var(--b);color:var(--t);min-height:100%;font-family:var(--f-body)}
+.inv .banner{width:100%;aspect-ratio:16/9;background:var(--p) center/cover no-repeat;display:block}
+.inv .banner.none{aspect-ratio:auto;height:28px}
+.inv .head{background:var(--p);color:#fff;padding:22px 20px 26px;text-align:center}
+.inv .head .sub{text-transform:uppercase;letter-spacing:.16em;font-size:13px;font-weight:700;opacity:.85}
+.inv .head h1{font-family:var(--hf);font-size:clamp(34px,8vw,54px);line-height:1.08;margin-top:6px;text-transform:none;font-weight:400}
+.inv .head .when{margin-top:10px;font-weight:600;font-size:17px}
+.inv .body{max-width:620px;margin:0 auto;padding:18px 18px 40px;display:grid;gap:16px}
+.inv .card{background:#fff;border-radius:14px;padding:16px 18px;box-shadow:0 2px 10px rgba(0,0,0,.06)}
+.inv .card h2{font-family:var(--f-head);font-size:22px;text-transform:uppercase;color:var(--p);margin-bottom:8px;letter-spacing:.02em}
+.inv .facts{display:grid;gap:8px}
+.inv .fact{display:grid;grid-template-columns:26px 1fr;gap:10px;align-items:start}
+.inv .fact svg{width:22px;height:22px;stroke:var(--a);fill:none;stroke-width:2}
+.inv .fact a{color:var(--p);font-weight:600}
+.inv .desc p{margin:0 0 10px}
+.inv .tl{list-style:none;margin:0;padding:0;display:grid;gap:0}
+.inv .tl li{display:grid;grid-template-columns:86px 1fr;gap:12px;padding:8px 0;border-top:1px dashed color-mix(in srgb,var(--p) 25%,#fff)}
+.inv .tl li:first-child{border-top:0}
+.inv .tl b{color:var(--a);font-variant-numeric:tabular-nums}
+.inv .cta{display:flex;gap:8px;flex-wrap:wrap}
+.inv .ibtn{border:2px solid var(--p);background:#fff;color:var(--p);border-radius:10px;padding:9px 14px;font-weight:700;text-decoration:none;display:inline-flex;gap:6px;align-items:center;font-size:15px}
+.inv .ibtn.fill{background:var(--p);color:#fff}
+.inv form{display:grid;gap:14px}
+.inv .fld{display:grid;gap:5px;font-weight:600;font-size:14px}
+.inv .fld input[type=text],.inv .fld input[type=number],.inv .fld textarea{border:1.5px solid color-mix(in srgb,var(--p) 25%,#fff);border-radius:9px;padding:10px 12px;font-size:16px;background:#fff;color:var(--t);font-weight:400;width:100%}
+.inv .yn{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.inv .yn button,.inv .opt{border:2px solid color-mix(in srgb,var(--p) 25%,#fff);background:#fff;border-radius:10px;padding:11px;font-weight:700;color:var(--t)}
+.inv .yn button[aria-pressed="true"],.inv .opt[aria-pressed="true"]{border-color:var(--p);background:var(--p);color:#fff}
+.inv .opts{display:flex;flex-wrap:wrap;gap:8px}
+.inv .opt{padding:8px 14px}
+.inv .stepper{display:inline-flex;align-items:center;gap:10px}
+.inv .stepper button{width:40px;height:40px;border-radius:50%;border:2px solid var(--p);background:#fff;color:var(--p);font-size:22px;font-weight:700;line-height:1}
+.inv .stepper b{font-size:22px;min-width:28px;text-align:center;font-variant-numeric:tabular-nums}
+.inv .submit{background:var(--a);color:#fff;border:0;border-radius:12px;padding:14px;font-size:18px;font-weight:800;font-family:var(--f-head);text-transform:uppercase;letter-spacing:.04em}
+.inv .notice{background:color-mix(in srgb,var(--a) 12%,#fff);border-left:4px solid var(--a);padding:10px 12px;border-radius:0 10px 10px 0;font-size:15px}
+.inv .done{text-align:center}
+.inv .done .big{font-family:var(--hf);font-size:34px;color:var(--p)}
+.inv .err{color:#B3261E;font-size:14px;font-weight:600}
+.inv .count{font-size:14px;opacity:.8}
+.inv .foot{text-align:center;font-size:12px;opacity:.6;padding-bottom:20px}
+
+@media (max-width:980px){.builder{grid-template-columns:minmax(0,1fr)}.previewcol{position:static}.phone{height:640px;max-width:420px;margin:0 auto}}
+@media (max-width:700px){.hero{grid-template-columns:minmax(0,1fr)}.grid2,.grid3{grid-template-columns:1fr}.colors{grid-template-columns:1fr 1fr}.row{grid-template-columns:90px 1fr auto}.qrow{grid-template-columns:1fr}.share{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div id="app"><div class="wrap"><div class="panel empty"><h2>Loading…</h2></div></div></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import { getAuth, onAuthStateChanged, signInWithPopup, signInWithCredential, GoogleAuthProvider, signOut, connectAuthEmulator } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import { getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, query, where, writeBatch, serverTimestamp, Timestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+const CFG = window.EVENTS_CONFIG || {};
+const OWNER = CFG.ownerUid || "";
+const fb = initializeApp(CFG.firebase || {});
+const auth = getAuth(fb), db = getFirestore(fb);
+const params = new URLSearchParams(location.search);
+const EMU = params.has("emu") && /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+if (EMU) { connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true }); connectFirestoreEmulator(db, "127.0.0.1", 8080); }
+
+/* ---------- helpers ---------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const rid = (n = 20) => { const a = new Uint8Array(n); crypto.getRandomValues(a); return [...a].map(x => "abcdefghijkmnpqrstuvwxyz23456789"[x % 32]).join(""); };
+function toast(m) { const t = document.createElement("div"); t.className = "toast"; t.textContent = m; document.body.appendChild(t); setTimeout(() => t.remove(), 2600); }
+async function copy(text) { try { await navigator.clipboard.writeText(text); toast("Copied"); } catch { prompt("Copy this link:", text); } }
+const safeImg = s => typeof s === "string" && /^data:image\/(jpeg|png|webp);base64,/.test(s) ? s : null;
+const guestUrl = (e, extra = "") => `${location.origin}${location.pathname}?e=${e}${extra}`;
+function fmtDate(ev) {
+  if (!ev.date) return "";
+  const d = new Date(ev.date + "T" + (ev.start || "12:00"));
+  const day = d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+  const t = s => s ? new Date(ev.date + "T" + s).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "";
+  return day + (ev.start ? " · " + t(ev.start) + (ev.end ? " – " + t(ev.end) : "") : "");
+}
+const deadlineDate = ev => ev.deadline && ev.deadline.toDate ? ev.deadline.toDate() : (ev.deadline ? new Date(ev.deadline) : null);
+
+const FONTS = { "Permanent Marker": '"Permanent Marker",cursive', "Bebas Neue": '"Bebas Neue",Impact,sans-serif', "Pacifico": 'Pacifico,cursive', "Fraunces": 'Fraunces,Georgia,serif', "Barlow Condensed": '"Barlow Condensed","Arial Narrow",sans-serif' };
+const PRESETS = [
+  { name: "Navy & Royal", primary: "#0B1D5E", accent: "#3A63FF", bg: "#E9F0FF", text: "#14224F", font: "Permanent Marker" },
+  { name: "Ballpark", primary: "#1E5631", accent: "#D99A1F", bg: "#F3F1E7", text: "#1B2A1F", font: "Bebas Neue" },
+  { name: "Sunset", primary: "#A3334A", accent: "#F08A4B", bg: "#FFF3EA", text: "#3B1F25", font: "Pacifico" },
+  { name: "Party", primary: "#5B21B6", accent: "#E8488A", bg: "#F7F1FF", text: "#2A1446", font: "Pacifico" },
+  { name: "Black & Gold", primary: "#151515", accent: "#C99A2E", bg: "#FAF7EF", text: "#1A1A1A", font: "Fraunces" },
+  { name: "Clean", primary: "#1F2937", accent: "#2563EB", bg: "#FFFFFF", text: "#111827", font: "Barlow Condensed" },
+];
+const blankEvent = () => ({ title: "", subtitle: "", date: "", start: "", end: "", location: "", address: "", description: "", hostName: "", timeline: [],
+  theme: { ...PRESETS[0] }, banner: null, access: "open", plusMax: 2, capacity: 0, deadline: null, showCount: true, questions: [], admins: [], published: false });
+
+/* ---------- auth state ---------- */
+const S = { user: null, role: "none", hostReq: null };
+async function loadRole() {
+  const u = S.user; if (!u) { S.role = "none"; return; }
+  if (OWNER && u.uid === OWNER) { S.role = "owner"; return; }
+  const h = await getDoc(doc(db, "hosts", u.uid)).catch(() => null);
+  S.hostReq = h && h.exists() ? h.data() : null;
+  S.role = S.hostReq ? (S.hostReq.status === "approved" ? "host" : S.hostReq.status) : "none";
+  if (S.role !== "host") {
+    const co = await getDocs(query(collection(db, "events"), where("admins", "array-contains", (u.email || "").toLowerCase()))).catch(() => null);
+    if (co && !co.empty) { S.cohostOnly = true; S.waitingRole = S.role; S.role = "cohost"; }
+  }
+}
+async function signIn() { try { await signInWithPopup(auth, new GoogleAuthProvider()); } catch (e) { if (e.code !== "auth/popup-closed-by-user") toast("Sign-in didn't finish. Try again."); } }
+if (EMU) window.__testSignIn = (email, sub) => signInWithCredential(auth, GoogleAuthProvider.credential(JSON.stringify({ sub: sub || email, email, email_verified: true })));
+
+/* ---------- guest view: the invitation ---------- */
+const ICON = {
+  cal: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
+  pin: '<svg viewBox="0 0 24 24"><path d="M12 21s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>',
+  host: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>',
+  clock: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+};
+function themeStyle(th = {}) {
+  return `--p:${th.primary || "#0B1D5E"};--a:${th.accent || "#3A63FF"};--b:${th.bg || "#E9F0FF"};--t:${th.text || "#14224F"};--hf:${FONTS[th.font] || FONTS["Permanent Marker"]}`;
+}
+function invitationHTML(ev, opts = {}) {
+  const img = safeImg(ev.banner);
+  const mapUrl = ev.address || ev.location ? "https://maps.google.com/?q=" + encodeURIComponent(ev.address || ev.location) : "";
+  const dl = deadlineDate(ev);
+  const facts = [
+    ev.date ? `<div class="fact">${ICON.cal}<div><b>${esc(fmtDate(ev))}</b></div></div>` : "",
+    ev.location || ev.address ? `<div class="fact">${ICON.pin}<div><b>${esc(ev.location)}</b>${ev.address ? `<br><a href="${mapUrl}" target="_blank" rel="noopener">${esc(ev.address)}</a>` : (mapUrl ? `<br><a href="${mapUrl}" target="_blank" rel="noopener">Directions</a>` : "")}</div></div>` : "",
+    ev.hostName ? `<div class="fact">${ICON.host}<div>Hosted by <b>${esc(ev.hostName)}</b></div></div>` : "",
+    dl ? `<div class="fact">${ICON.clock}<div>Please RSVP by <b>${esc(dl.toLocaleString(undefined, { month: "long", day: "numeric", hour: "numeric", minute: "2-digit" }))}</b></div></div>` : "",
+  ].join("");
+  return `<div class="inv" style="${themeStyle(ev.theme)}">
+    ${img ? `<div class="banner" style="background-image:url('${img}')" role="img" aria-label="Event banner"></div>` : `<div class="banner none"></div>`}
+    <header class="head">${ev.subtitle ? `<div class="sub">${esc(ev.subtitle)}</div>` : ""}<h1>${esc(ev.title || "Your event title")}</h1>${ev.date ? `<div class="when">${esc(fmtDate(ev))}</div>` : ""}</header>
+    <div class="body">
+      ${facts ? `<section class="card"><div class="facts">${facts}</div>${ev.date ? `<div class="cta" style="margin-top:12px"><a class="ibtn" data-ics href="#">＋ Add to calendar</a>${mapUrl ? `<a class="ibtn" href="${mapUrl}" target="_blank" rel="noopener">Directions</a>` : ""}</div>` : ""}</section>` : ""}
+      ${ev.description ? `<section class="card desc"><h2>The details</h2>${esc(ev.description).split(/\n{2,}/).map(p => `<p>${p.replace(/\n/g, "<br>")}</p>`).join("")}</section>` : ""}
+      ${(ev.timeline || []).length ? `<section class="card"><h2>Game plan</h2><ul class="tl">${ev.timeline.map(t => `<li><b>${esc(t.time)}</b><span>${esc(t.label)}</span></li>`).join("")}</ul></section>` : ""}
+      <section class="card" id="rsvpCard">${opts.rsvpHTML || ""}</section>
+      <div class="foot">Made with ${esc(CFG.appName || "Steele Events")}</div>
+    </div></div>`;
+}
+function icsFor(ev) {
+  const f = (d, t) => (d || "").replace(/-/g, "") + "T" + ((t || "12:00").replace(":", "")) + "00";
+  const endT = ev.end || (ev.start ? String(Math.min(23, +ev.start.slice(0, 2) + 2)).padStart(2, "0") + ev.start.slice(2) : "14:00");
+  const clean = s => String(s || "").replace(/[\\;,]/g, m => "\\" + m).replace(/\n/g, "\\n");
+  return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Steele Events//EN", "BEGIN:VEVENT", "UID:" + rid(12) + "@steele-events",
+    "DTSTAMP:" + new Date().toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z", "DTSTART:" + f(ev.date, ev.start), "DTEND:" + f(ev.date, endT),
+    "SUMMARY:" + clean(ev.title), "LOCATION:" + clean([ev.location, ev.address].filter(Boolean).join(", ")), "DESCRIPTION:" + clean(location.href),
+    "END:VEVENT", "END:VCALENDAR"].join("\r\n");
+}
+function wireIcs(root, ev) {
+  root.querySelectorAll("[data-ics]").forEach(a => {
+    const url = URL.createObjectURL(new Blob([icsFor(ev)], { type: "text/calendar" }));
+    a.href = url; a.download = (ev.title || "event").replace(/[^\w]+/g, "-") + ".ics";
+  });
+}
+
+async function guestView(eid) {
+  const inviteId = params.get("i"); let rsvpId = params.get("r");
+  const app = $("#app");
+  const snap = await getDoc(doc(db, "events", eid)).catch(() => null);
+  if (!snap || !snap.exists()) { app.innerHTML = `<div class="wrap"><div class="panel empty"><h2>This invitation isn't available</h2><p class="muted">It may have been taken down, or the link is incomplete. Check with the host.</p></div></div>`; return; }
+  const ev = snap.data(); document.title = ev.title + " · RSVP";
+  let invite = null;
+  if (ev.access === "invite") {
+    if (!inviteId) { app.innerHTML = invitationHTML(ev, { rsvpHTML: `<h2>RSVP</h2><p class="notice">This event is invite-only. Use the personal link from your invitation to RSVP.</p>` }); wireIcs(app, ev); return; }
+    const iv = await getDoc(doc(db, "events", eid, "invites", inviteId)).catch(() => null);
+    if (!iv || !iv.exists()) { app.innerHTML = invitationHTML(ev, { rsvpHTML: `<h2>RSVP</h2><p class="notice">We couldn't find this invitation. Check the link with the host.</p>` }); wireIcs(app, ev); return; }
+    invite = iv.data(); rsvpId = inviteId;
+  }
+  const stored = (() => { try { return localStorage.getItem("rsvp:" + eid); } catch { return null; } })();
+  rsvpId = rsvpId || stored;
+  let existing = null;
+  if (rsvpId) { const r = await getDoc(doc(db, "events", eid, "rsvps", rsvpId)).catch(() => null); if (r && r.exists()) existing = r.data(); else if (!invite) rsvpId = null; }
+  const countSnap = await getDoc(doc(db, "events", eid, "meta", "count")).catch(() => null);
+  let yes = countSnap && countSnap.exists() ? countSnap.data().yes : 0;
+
+  const st = existing ? { name: existing.name, attending: existing.attending, party: existing.partySize || 1, answers: { ...(existing.answers || {}) }, note: existing.note || "" }
+    : { name: invite ? invite.name : "", attending: null, party: 1, answers: {}, note: "" };
+  let editing = !existing;
+  const dl = deadlineDate(ev); const closed = dl && dl < new Date();
+  const maxParty = () => {
+    let m = ev.plusMax + 1; if (invite && invite.max) m = Math.min(m, invite.max);
+    if (ev.capacity) { const mine = existing && existing.attending ? existing.partySize : 0; m = Math.min(m, ev.capacity - yes + mine); }
+    return Math.max(m, 0);
+  };
+  const full = () => ev.capacity && maxParty() < 1;
+
+  function rsvpHTML() {
+    const countLine = ev.showCount && yes > 0 ? `<p class="count">${yes} ${yes === 1 ? "person is" : "people are"} coming${ev.capacity ? ` · ${Math.max(ev.capacity - yes, 0)} spots left` : ""}</p>` : "";
+    if (existing && !editing) {
+      const link = guestUrl(eid, invite ? "&i=" + inviteId : "&r=" + rsvpId);
+      return `<div class="done"><div class="big">${existing.attending ? "You're in!" : "Thanks for letting us know"}</div>
+        <p>${esc(existing.name)}${existing.attending ? ` · party of ${existing.partySize}` : " · can't make it"}</p>${countLine}
+        ${closed ? `<p class="notice">RSVPs are closed. Contact the host to make changes.</p>` : `<div class="cta" style="justify-content:center"><button class="ibtn fill" id="editR">Change my RSVP</button><button class="ibtn" id="copyR">Copy my RSVP link</button></div>
+        <p class="count" style="margin-top:10px">Save your link to change your answer later from any device.</p>`}</div>`;
+    }
+    if (closed) return `<h2>RSVP</h2><p class="notice">RSVPs closed on ${esc(dl.toLocaleDateString(undefined, { month: "long", day: "numeric" }))}. Contact the host.</p>`;
+    const qs = (ev.questions || []).map(q => {
+      const v = st.answers[q.id] ?? "";
+      const lab = `${esc(q.label)}${q.required ? " *" : ""}`;
+      if (q.type === "choice") return `<div class="fld" data-q="${esc(q.id)}"><span>${lab}</span><div class="opts">${(q.options || []).map(o => `<button type="button" class="opt" data-qo="${esc(q.id)}" data-v="${esc(o)}" aria-pressed="${v === o}">${esc(o)}</button>`).join("")}</div></div>`;
+      if (q.type === "number") return `<label class="fld"><span>${lab}</span><input type="number" inputmode="numeric" data-qi="${esc(q.id)}" value="${esc(v)}"></label>`;
+      return `<label class="fld"><span>${lab}</span><input type="text" data-qi="${esc(q.id)}" value="${esc(v)}" maxlength="200"></label>`;
+    }).join("");
+    const mp = maxParty();
+    return `<h2>RSVP</h2>${countLine}
+      <form id="rf" novalidate>
+        <label class="fld"><span>Your name *</span><input type="text" id="rName" value="${esc(st.name)}" maxlength="80" autocomplete="name"></label>
+        <div class="fld"><span>Will you be there? *</span><div class="yn"><button type="button" data-att="1" aria-pressed="${st.attending === true}" ${full() && !(existing && existing.attending) ? "disabled" : ""}>Yes, I'll be there</button><button type="button" data-att="0" aria-pressed="${st.attending === false}">Can't make it</button></div>
+          ${full() && !(existing && existing.attending) ? `<p class="notice">This event is full. You can still let the host know you can't make it.</p>` : ""}</div>
+        ${st.attending && mp > 1 ? `<div class="fld"><span>How many in your group, including you?</span><div class="stepper"><button type="button" data-step="-1" aria-label="Fewer">−</button><b id="pv">${Math.min(st.party, mp)}</b><button type="button" data-step="1" aria-label="More">+</button><span class="count">up to ${mp}</span></div></div>` : ""}
+        ${st.attending ? qs : ""}
+        <label class="fld"><span>Note for the host</span><textarea id="rNote" rows="2" maxlength="1000">${esc(st.note)}</textarea></label>
+        <p class="err" id="rErr" hidden></p>
+        <button class="submit" id="rSubmit">${existing ? "Update my RSVP" : "Send RSVP"}</button>
+      </form>`;
+  }
+  function paint() {
+    app.innerHTML = invitationHTML(ev, { rsvpHTML: rsvpHTML() }); wireIcs(app, ev);
+    const card = $("#rsvpCard");
+    const e = $("#editR"); if (e) e.onclick = () => { editing = true; paint(); };
+    const c = $("#copyR"); if (c) c.onclick = () => copy(guestUrl(eid, invite ? "&i=" + inviteId : "&r=" + rsvpId));
+    const f = $("#rf"); if (!f) return;
+    const pull = () => { st.name = $("#rName").value; st.note = $("#rNote").value; card.querySelectorAll("[data-qi]").forEach(i => st.answers[i.dataset.qi] = i.value); };
+    card.querySelectorAll("[data-att]").forEach(b => b.onclick = () => { pull(); st.attending = b.dataset.att === "1"; if (!st.attending) st.party = 1; paint(); });
+    card.querySelectorAll("[data-step]").forEach(b => b.onclick = () => { st.party = Math.max(1, Math.min(maxParty(), st.party + +b.dataset.step)); $("#pv").textContent = st.party; });
+    card.querySelectorAll("[data-qo]").forEach(b => b.onclick = () => { pull(); st.answers[b.dataset.qo] = b.dataset.v; paint(); });
+    f.onsubmit = async ev2 => {
+      ev2.preventDefault(); pull();
+      const err = m => { const x = $("#rErr"); x.textContent = m; x.hidden = false; };
+      if (!st.name.trim()) return err("Please add your name.");
+      if (st.attending === null) return err("Let the host know if you'll be there.");
+      if (st.attending) for (const q of ev.questions || []) if (q.required && !String(st.answers[q.id] ?? "").trim()) return err(`Please answer: ${q.label}`);
+      const btn = $("#rSubmit"); btn.disabled = true; btn.textContent = "Sending…";
+      const party = st.attending ? Math.max(1, Math.min(st.party, maxParty() || 1)) : 0;
+      const answers = {}; if (st.attending) for (const q of ev.questions || []) if (st.answers[q.id] !== undefined && st.answers[q.id] !== "") answers[q.id] = q.type === "number" ? Number(st.answers[q.id]) : String(st.answers[q.id]).slice(0, 200);
+      const id = rsvpId || rid(24);
+      const data = { name: st.name.trim().slice(0, 80), attending: !!st.attending, partySize: party, answers, note: st.note.trim().slice(0, 1000), createdAt: existing ? existing.createdAt : serverTimestamp(), updatedAt: serverTimestamp() };
+      if (invite) data.inviteId = inviteId;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const cs = await getDoc(doc(db, "events", eid, "meta", "count")); const before = cs.exists() ? cs.data().yes : 0;
+          const oldHeads = existing && existing.attending ? existing.partySize : 0;
+          const after = before - oldHeads + party;
+          if (ev.capacity && after > ev.capacity) { btn.disabled = false; btn.textContent = "Send RSVP"; yes = before; return err(`Only ${Math.max(ev.capacity - before + oldHeads, 0)} spots are left. Lower your group size.`); }
+          const b = writeBatch(db); b.set(doc(db, "events", eid, "rsvps", id), data); b.set(doc(db, "events", eid, "meta", "count"), { yes: after }); await b.commit();
+          yes = after; rsvpId = id; try { if (!invite) localStorage.setItem("rsvp:" + eid, id); } catch {}
+          existing = { ...data, createdAt: data.createdAt }; editing = false; paint(); return;
+        } catch (e) { if (attempt === 1) { btn.disabled = false; btn.textContent = existing ? "Update my RSVP" : "Send RSVP"; err(closed ? "RSVPs are closed." : "That didn't go through. Please try again."); } }
+      }
+    };
+  }
+  paint();
+}
+
+/* ---------- host app ---------- */
+function shell(inner) {
+  const u = S.user;
+  $("#app").innerHTML = `<div class="wrap"><header class="top"><a class="brandmark" href="#">${esc(CFG.appName || "Steele Events").replace(/ (\w+)$/, ' <span>$1</span>')}</a>
+    <div class="who">${u ? `${S.role === "owner" ? '<a class="btn small" href="#hosts">Hosts</a>' : ""}<span>${esc(u.email)}</span><button class="btn small" id="out">Sign out</button>` : ""}</div></header><main id="main">${inner}</main></div>`;
+  const o = $("#out"); if (o) o.onclick = () => signOut(auth);
+}
+function landing() {
+  shell(`<section class="hero"><div><h1>Invitations in minutes</h1><p>Pick a look, add the details, share one link. Guests RSVP from their phone, no app or account needed. You see every answer in one place.</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:18px"><button class="btn primary" id="gin">Sign in with Google</button></div>
+    <p class="muted" style="font-size:14px;margin-top:10px">Hosts are approved by ${esc(CFG.appName || "the organizer")}. Sign in to request access.</p></div>
+    <div class="card-demo" aria-hidden="true"><div class="t">Sam's 12th Birthday Tailgate</div><div class="d">Friday, October 2 · 5:00 PM</div><div class="r"><span>Yes, I'll be there</span><span>Pizza: Cheese</span></div></div></section>`);
+  $("#gin").onclick = signIn;
+}
+function waitingRoom() {
+  const pending = S.role === "pending", denied = S.role === "denied";
+  shell(`<div class="panel empty" style="max-width:620px;margin:30px auto">
+    <h2>${pending ? "Request sent" : denied ? "Access not approved" : "Become a host"}</h2>
+    <p class="muted">${pending ? "You'll be able to create events as soon as your request is approved." : denied ? "This account can't create events. Reach out if you think that's a mistake." : "Hosts create and manage their own events. Request access and you'll be approved shortly."}</p>
+    ${!pending && !denied ? `<form id="rq" style="display:grid;gap:10px;max-width:360px;margin:16px auto 0"><label class="f">Your name<input id="rqName" required value="${esc(S.user.displayName || "")}"></label><button class="btn primary">Request host access</button></form>` : ""}
+  </div>`);
+  const f = $("#rq"); if (f) f.onsubmit = async e => { e.preventDefault();
+    try { await setDoc(doc(db, "hosts", S.user.uid), { email: (S.user.email || "").toLowerCase(), name: $("#rqName").value.trim().slice(0, 80), status: "pending", requestedAt: serverTimestamp() }); S.role = "pending"; route(); }
+    catch { toast("Couldn't send the request. Try again."); } };
+}
+async function myEvents() {
+  const em = (S.user.email || "").toLowerCase(); const out = new Map();
+  const qs = S.role === "owner" ? [collection(db, "events")] : [query(collection(db, "events"), where("ownerUid", "==", S.user.uid)), query(collection(db, "events"), where("admins", "array-contains", em))];
+  for (const q of qs) { const s = await getDocs(q).catch(() => null); s && s.forEach(d => out.set(d.id, { id: d.id, ...d.data() })); }
+  return [...out.values()].sort((a, b) => (a.date || "9").localeCompare(b.date || "9"));
+}
+async function dashboard() {
+  shell(`<div class="dh"><div><h1>Your events</h1><p class="muted" style="margin:4px 0 0">${S.role === "cohost" ? "Events you co-host." : "Everything you host or co-host."}</p></div>${S.role === "cohost" ? "" : '<a class="btn primary" href="#new">＋ New event</a>'}</div><div id="list"><div class="panel empty"><p class="muted">Loading your events…</p></div></div>`);
+  const evs = await myEvents();
+  if (S.role === "cohost") $("#main").insertAdjacentHTML("beforeend", `<p class="muted" style="margin-top:18px">Want to create your own events? ${S.waitingRole === "pending" ? "Your host request is waiting for approval." : '<a href="#" id="askHost">Request host access</a>.'}</p>`);
+  const ah = $("#askHost"); if (ah) ah.onclick = e => { e.preventDefault(); waitingRoom(); };
+  if (!evs.length) { $("#list").innerHTML = `<div class="panel empty"><h2>No events yet</h2><p class="muted">Create your first invitation. It takes about five minutes.</p><a class="btn primary" href="#new">＋ New event</a></div>`; return; }
+  $("#list").innerHTML = `<div class="evgrid">${evs.map(ev => { const img = safeImg(ev.banner); return `<article class="evcard"><div class="ban" style="--p:${esc(ev.theme?.primary || "#1D3FD1")};${img ? `background-image:url('${img}')` : ""}"><span class="pill ${ev.published ? "live" : "draft"}">${ev.published ? "Live" : "Draft"}</span></div>
+    <div class="body"><h3>${esc(ev.title)}</h3><div class="meta">${esc(fmtDate(ev) || "No date yet")}</div>${ev.ownerUid !== S.user.uid ? `<div class="meta">Co-host</div>` : ""}
+    <div class="acts"><a class="btn small" href="#edit/${ev.id}">Edit</a><a class="btn small" href="#responses/${ev.id}">Responses</a>${ev.published ? `<button class="btn small" data-copy="${ev.id}">Copy link</button>` : ""}</div></div></article>`; }).join("")}</div>`;
+  document.querySelectorAll("[data-copy]").forEach(b => b.onclick = () => copy(guestUrl(b.dataset.copy)));
+}
+
+/* ---------- builder ---------- */
+async function shrinkImage(file) {
+  const url = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); });
+  const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+  const w = Math.min(1600, img.naturalWidth), h = Math.round(img.naturalHeight * w / img.naturalWidth);
+  const c = document.createElement("canvas"); c.width = w; c.height = h; c.getContext("2d").drawImage(img, 0, 0, w, h);
+  let q = 0.85, out = c.toDataURL("image/jpeg", q);
+  while (out.length > 700000 && q > 0.4) { q -= 0.1; out = c.toDataURL("image/jpeg", q); }
+  if (out.length > 700000) { const c2 = document.createElement("canvas"); c2.width = 1000; c2.height = Math.round(h * 1000 / w); c2.getContext("2d").drawImage(c, 0, 0, c2.width, c2.height); out = c2.toDataURL("image/jpeg", 0.75); }
+  return out;
+}
+async function builder(eid) {
+  let ev = blankEvent(), isOwnerOfEvent = true, invites = [];
+  if (eid) {
+    const s = await getDoc(doc(db, "events", eid)).catch(() => null);
+    if (!s || !s.exists()) { shell(`<div class="panel empty"><h2>Event not found</h2><a class="btn" href="#">Back to your events</a></div>`); return; }
+    ev = { ...blankEvent(), ...s.data() }; isOwnerOfEvent = ev.ownerUid === S.user.uid || S.role === "owner";
+    const iv = await getDocs(collection(db, "events", eid, "invites")).catch(() => null); invites = iv ? iv.docs.map(d => ({ id: d.id, ...d.data() })) : [];
+  }
+  const dl = deadlineDate(ev); const dlLocal = dl ? new Date(dl.getTime() - dl.getTimezoneOffset() * 60000).toISOString().slice(0, 16) : "";
+  let dirty = false;
+  shell(`<div class="dh"><div><h1>${eid ? "Edit event" : "New event"}</h1><p class="muted" style="margin:4px 0 0">Changes show in the preview as you type.</p></div><a class="btn" href="#">← Your events</a></div>
+  <div class="builder"><div>
+    <details class="sec" open><summary>Details <small>What, when, where</small></summary><div class="in">
+      <label class="f">Event name *<input id="title" maxlength="120" placeholder="Sam's 12th Birthday Tailgate"></label>
+      <label class="f">Small line above the name<input id="subtitle" maxlength="80" placeholder="You're invited"></label>
+      <div class="grid3"><label class="f">Date<input type="date" id="date"></label><label class="f">Starts<input type="time" id="start"></label><label class="f">Ends<input type="time" id="end"></label></div>
+      <div class="grid2"><label class="f">Place name<input id="location" placeholder="Steele house"></label><label class="f">Address<input id="address" placeholder="Street, town"></label></div>
+      <label class="f">Hosted by<input id="hostName" placeholder="The Steeles"></label>
+      <label class="f">Details for guests<textarea id="description" placeholder="What to bring, parking, what's happening…"></textarea></label>
+      <div><div class="f" style="margin-bottom:6px">Schedule <span class="hint">(optional)</span></div><div class="rows" id="tl"></div><button type="button" class="btn small" id="addTl" style="margin-top:8px">＋ Add a time</button></div>
+    </div></details>
+
+    <details class="sec" open><summary>Look <small>Colors, font, banner</small></summary><div class="in">
+      <div class="presets" id="presets"></div>
+      <div class="colors"><label>Main<input type="color" id="c_primary"></label><label>Accent<input type="color" id="c_accent"></label><label>Background<input type="color" id="c_bg"></label><label>Text<input type="color" id="c_text"></label></div>
+      <label class="f">Title font<select id="font">${Object.keys(FONTS).map(f => `<option>${f}</option>`).join("")}</select></label>
+      <div class="f">Banner image</div><div class="banprev" id="banprev"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><label class="btn small" style="cursor:pointer">Upload image<input type="file" id="banFile" accept="image/*" hidden></label><button type="button" class="btn small" id="banRm">Remove</button></div>
+      <p class="hint">Wide photos work best. Large images are resized automatically.</p>
+    </div></details>
+
+    <details class="sec"><summary>Guests <small>Who can RSVP and limits</small></summary><div class="in">
+      <div class="f">Who can RSVP</div><div class="seg" id="access"><button type="button" data-v="open">Anyone with the link</button><button type="button" data-v="invite">Invite list only</button></div>
+      <div class="grid3"><label class="f">Extra guests per RSVP<input type="number" id="plusMax" min="0" max="20"><span class="hint">0 = just the invitee</span></label>
+        <label class="f">Total capacity<input type="number" id="capacity" min="0"><span class="hint">0 = no limit</span></label>
+        <label class="f">RSVP deadline<input type="datetime-local" id="deadline"></label></div>
+      <label class="chk"><input type="checkbox" id="showCount"> Show guests how many people are coming</label>
+      <div id="invBox"></div>
+    </div></details>
+
+    <details class="sec"><summary>Questions <small>Ask guests anything</small></summary><div class="in"><div class="rows" id="qs"></div><button type="button" class="btn small" id="addQ">＋ Add a question</button><p class="hint">Example: Pizza choice → Cheese, Pepperoni.</p></div></details>
+
+    <details class="sec"><summary>Co-hosts <small>Who else can manage this</small></summary><div class="in">
+      <p class="hint">Co-hosts sign in with Google using this email. They can edit the event and see responses.${isOwnerOfEvent ? "" : " Only the event's owner can change this list."}</p>
+      <div class="chips" id="admins"></div>
+      ${isOwnerOfEvent ? `<form class="row" style="grid-template-columns:1fr auto" id="addAdmin"><input class="inp" type="email" id="adminEmail" placeholder="name@gmail.com"><button class="btn small">Add</button></form>` : ""}
+    </div></details>
+
+    <div id="sharebox"></div>
+    <div class="savebar"><label class="chk"><input type="checkbox" id="published"> <b>Published</b> <span class="muted">(guests can open it)</span></label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">${eid && isOwnerOfEvent ? '<button type="button" class="btn danger" id="del">Delete</button>' : ""}<button class="btn primary" id="save">Save</button></div></div>
+  </div>
+  <aside class="previewcol"><div class="prevlabel"><span>Guest preview</span><span id="dirty"></span></div><div class="phone"><div class="scroller" id="preview"></div></div></aside></div>`);
+
+  const F = ["title", "subtitle", "date", "start", "end", "location", "address", "hostName", "description"];
+  F.forEach(k => { $("#" + k).value = ev[k] || ""; $("#" + k).oninput = () => { ev[k] = $("#" + k).value; changed(); }; });
+  $("#plusMax").value = ev.plusMax; $("#capacity").value = ev.capacity || 0; $("#deadline").value = dlLocal; $("#showCount").checked = !!ev.showCount; $("#published").checked = !!ev.published;
+  $("#plusMax").oninput = () => { ev.plusMax = Math.max(0, Math.min(20, parseInt($("#plusMax").value || "0", 10))); changed(); };
+  $("#capacity").oninput = () => { ev.capacity = Math.max(0, parseInt($("#capacity").value || "0", 10)); changed(); };
+  $("#deadline").oninput = () => { ev.deadline = $("#deadline").value ? new Date($("#deadline").value) : null; changed(); };
+  $("#showCount").onchange = () => { ev.showCount = $("#showCount").checked; changed(); };
+  $("#published").onchange = () => { ev.published = $("#published").checked; changed(); };
+
+  function changed(rerenderParts) { dirty = true; $("#dirty").textContent = "Unsaved changes"; preview(); if (rerenderParts) rerenderParts(); }
+  function preview() {
+    const sample = `<h2>RSVP</h2><form><label class="fld"><span>Your name *</span><input type="text" value="Sam Guest" disabled></label><div class="fld"><span>Will you be there? *</span><div class="yn"><button type="button" aria-pressed="true">Yes, I'll be there</button><button type="button">Can't make it</button></div></div>
+      ${ev.plusMax > 0 ? `<div class="fld"><span>How many in your group, including you?</span><div class="stepper"><button type="button">−</button><b>2</b><button type="button">+</button><span class="count">up to ${ev.plusMax + 1}</span></div></div>` : ""}
+      ${(ev.questions || []).map(q => `<div class="fld"><span>${esc(q.label || "Question")}${q.required ? " *" : ""}</span>${q.type === "choice" ? `<div class="opts">${(q.options || []).map((o, i) => `<button type="button" class="opt" aria-pressed="${i === 0}">${esc(o)}</button>`).join("")}</div>` : `<input type="text" disabled>`}</div>`).join("")}
+      <button type="button" class="submit">Send RSVP</button></form>`;
+    $("#preview").innerHTML = invitationHTML(ev, { rsvpHTML: ev.access === "invite" ? sample.replace("<h2>RSVP</h2>", "<h2>RSVP</h2><p class=\"count\">Invite-only: each guest uses their own link.</p>") : sample });
+  }
+
+  // schedule
+  function drawTl() { $("#tl").innerHTML = (ev.timeline || []).map((t, i) => `<div class="row"><input class="inp" data-tt="${i}" value="${esc(t.time)}" placeholder="5:00 PM"><input class="inp" data-tl="${i}" value="${esc(t.label)}" placeholder="Pizza and cake"><button type="button" class="xbtn" data-tx="${i}" aria-label="Remove">Remove</button></div>`).join("");
+    document.querySelectorAll("[data-tt]").forEach(x => x.oninput = () => { ev.timeline[+x.dataset.tt].time = x.value; changed(); });
+    document.querySelectorAll("[data-tl]").forEach(x => x.oninput = () => { ev.timeline[+x.dataset.tl].label = x.value; changed(); });
+    document.querySelectorAll("[data-tx]").forEach(x => x.onclick = () => { ev.timeline.splice(+x.dataset.tx, 1); drawTl(); changed(); }); }
+  $("#addTl").onclick = () => { ev.timeline = [...(ev.timeline || []), { time: "", label: "" }]; drawTl(); changed(); };
+  drawTl();
+
+  // look
+  function drawLook() {
+    const th = ev.theme;
+    $("#presets").innerHTML = PRESETS.map((p, i) => `<button type="button" class="preset" data-p="${i}" aria-pressed="${p.primary === th.primary && p.accent === th.accent && p.bg === th.bg}"><i style="background:linear-gradient(135deg,${p.primary} 50%,${p.accent} 50%)"></i>${p.name}</button>`).join("");
+    document.querySelectorAll("[data-p]").forEach(b => b.onclick = () => { ev.theme = { ...PRESETS[+b.dataset.p] }; drawLook(); changed(); });
+    [["primary", "c_primary"], ["accent", "c_accent"], ["bg", "c_bg"], ["text", "c_text"]].forEach(([k, id]) => { $("#" + id).value = th[k]; $("#" + id).oninput = () => { ev.theme[k] = $("#" + id).value; changed(); drawPresetsOnly(); }; });
+    $("#font").value = th.font in FONTS ? th.font : "Permanent Marker"; $("#font").onchange = () => { ev.theme.font = $("#font").value; changed(); };
+    const img = safeImg(ev.banner); $("#banprev").innerHTML = img ? `<img src="${img}" alt="Banner preview">` : `<span class="muted">No banner. The main color is used instead.</span>`;
+  }
+  function drawPresetsOnly() { document.querySelectorAll("[data-p]").forEach(b => { const p = PRESETS[+b.dataset.p]; b.setAttribute("aria-pressed", p.primary === ev.theme.primary && p.accent === ev.theme.accent && p.bg === ev.theme.bg); }); }
+  $("#banFile").onchange = async e => { const f = e.target.files[0]; if (!f) return; try { ev.banner = await shrinkImage(f); drawLook(); changed(); toast("Banner added"); } catch { toast("That image couldn't be read. Try a JPG or PNG."); } };
+  $("#banRm").onclick = () => { ev.banner = null; drawLook(); changed(); };
+  drawLook();
+
+  // guests
+  function drawAccess() {
+    document.querySelectorAll("#access button").forEach(b => { b.setAttribute("aria-pressed", b.dataset.v === ev.access); b.onclick = () => { ev.access = b.dataset.v; drawAccess(); changed(); }; });
+    const box = $("#invBox");
+    if (ev.access !== "invite") { box.innerHTML = ""; return; }
+    if (!eid) { box.innerHTML = `<p class="notice hint">Save the event first, then add your guest list here. Each guest gets a personal link.</p>`; return; }
+    box.innerHTML = `<div class="f">Guest list</div>
+      <form id="invForm" style="display:grid;gap:8px"><textarea class="inp" id="invNames" rows="3" placeholder="One per line: The Lees, Grandma Jo, Coach Mike"></textarea>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><label class="f" style="grid-auto-flow:column;align-items:center">Max people each <input type="number" id="invMax" min="1" max="21" value="${ev.plusMax + 1}" style="width:80px"></label><button class="btn small">Add guests</button></div></form>
+      ${invites.length ? `<div class="tablewrap" style="border:0"><table class="invtable"><thead><tr><th>Guest</th><th>Max</th><th>Link</th><th></th></tr></thead><tbody>${invites.map(iv => `<tr><td>${esc(iv.name)}</td><td>${iv.max || ""}</td><td><button type="button" class="btn small" data-icopy="${iv.id}">Copy link</button></td><td><button type="button" class="xbtn" data-idel="${iv.id}">Remove</button></td></tr>`).join("")}</tbody></table></div>` : `<p class="hint">No guests yet.</p>`}`;
+    $("#invForm").onsubmit = async e => { e.preventDefault(); const names = $("#invNames").value.split("\n").map(s => s.trim()).filter(Boolean).slice(0, 200); const max = Math.max(1, parseInt($("#invMax").value || "1", 10));
+      if (!names.length) return; const b = writeBatch(db); const added = names.map(n => ({ id: rid(16), name: n.slice(0, 80), max }));
+      added.forEach(a => b.set(doc(db, "events", eid, "invites", a.id), { name: a.name, max: a.max })); try { await b.commit(); invites.push(...added); drawAccess(); toast(`Added ${added.length} guest${added.length > 1 ? "s" : ""}`); } catch { toast("Couldn't add guests"); } };
+    box.querySelectorAll("[data-icopy]").forEach(b => b.onclick = () => copy(guestUrl(eid, "&i=" + b.dataset.icopy)));
+    box.querySelectorAll("[data-idel]").forEach(b => b.onclick = async () => { try { await deleteDoc(doc(db, "events", eid, "invites", b.dataset.idel)); invites = invites.filter(x => x.id !== b.dataset.idel); drawAccess(); } catch { toast("Couldn't remove"); } });
+  }
+  drawAccess();
+
+  // questions
+  function drawQs() {
+    $("#qs").innerHTML = (ev.questions || []).map((q, i) => `<div class="qrow"><input class="inp" data-ql="${i}" value="${esc(q.label)}" placeholder="Question" aria-label="Question">
+      <select class="inp" data-qt="${i}" aria-label="Answer type"><option value="choice" ${q.type === "choice" ? "selected" : ""}>Pick one</option><option value="text" ${q.type === "text" ? "selected" : ""}>Short answer</option><option value="number" ${q.type === "number" ? "selected" : ""}>Number</option></select>
+      <button type="button" class="xbtn" data-qx="${i}">Remove</button>
+      <div class="opts" style="display:grid;gap:6px">${q.type === "choice" ? `<input class="inp" data-qo="${i}" value="${esc((q.options || []).join(", "))}" placeholder="Choices, separated by commas">` : ""}<label class="chk" style="font-size:14px"><input type="checkbox" data-qr="${i}" ${q.required ? "checked" : ""}> Required</label></div></div>`).join("");
+    document.querySelectorAll("[data-ql]").forEach(x => x.oninput = () => { ev.questions[+x.dataset.ql].label = x.value; changed(); });
+    document.querySelectorAll("[data-qt]").forEach(x => x.onchange = () => { ev.questions[+x.dataset.qt].type = x.value; drawQs(); changed(); });
+    document.querySelectorAll("[data-qo]").forEach(x => x.oninput = () => { ev.questions[+x.dataset.qo].options = x.value.split(",").map(s => s.trim()).filter(Boolean).slice(0, 12); changed(); });
+    document.querySelectorAll("[data-qr]").forEach(x => x.onchange = () => { ev.questions[+x.dataset.qr].required = x.checked; changed(); });
+    document.querySelectorAll("[data-qx]").forEach(x => x.onclick = () => { ev.questions.splice(+x.dataset.qx, 1); drawQs(); changed(); });
+  }
+  $("#addQ").onclick = () => { ev.questions = [...(ev.questions || []), { id: "q" + rid(6), label: "", type: "choice", options: [], required: false }]; drawQs(); changed(); };
+  drawQs();
+
+  // co-hosts
+  function drawAdmins() {
+    $("#admins").innerHTML = (ev.admins || []).map((a, i) => `<span class="chip">${esc(a)}${isOwnerOfEvent ? `<button type="button" data-ax="${i}" aria-label="Remove ${esc(a)}">×</button>` : ""}</span>`).join("") || `<span class="hint">No co-hosts yet.</span>`;
+    document.querySelectorAll("[data-ax]").forEach(b => b.onclick = () => { ev.admins.splice(+b.dataset.ax, 1); drawAdmins(); changed(); });
+  }
+  const af = $("#addAdmin"); if (af) af.onsubmit = e => { e.preventDefault(); const v = $("#adminEmail").value.trim().toLowerCase(); if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) return toast("Enter a full email address"); if (!ev.admins.includes(v)) ev.admins.push(v); $("#adminEmail").value = ""; drawAdmins(); changed(); };
+  drawAdmins();
+
+  // share
+  function drawShare() {
+    if (!eid || !ev.published) { $("#sharebox").innerHTML = ""; return; }
+    const link = guestUrl(eid);
+    $("#sharebox").innerHTML = `<section class="sec" style="padding:16px 18px"><div class="share"><div class="qr" id="qr"></div><div style="display:grid;gap:8px;min-width:0"><b>Share this invitation</b><div class="linkbox">${esc(link)}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn small" id="cpy">Copy link</button><a class="btn small" href="${esc(link)}" target="_blank" rel="noopener">Open as a guest</a><a class="btn small" href="#responses/${eid}">Responses</a></div>
+      ${ev.access === "invite" ? `<p class="hint">Invite-only: send each guest their own link from the guest list.</p>` : ""}</div></div></section>`;
+    $("#cpy").onclick = () => copy(link);
+    try { if (window.QRCode) new QRCode($("#qr"), { text: link, width: 240, height: 240, colorDark: "#14224F", colorLight: "#ffffff" }); else $("#qr").hidden = true; } catch { $("#qr").hidden = true; }
+  }
+  drawShare(); preview();
+
+  window.onbeforeunload = () => dirty ? true : undefined;
+  $("#save").onclick = async () => {
+    if (!ev.title.trim()) { toast("Add an event name first"); $("#title").focus(); return; }
+    const btn = $("#save"); btn.disabled = true; btn.textContent = "Saving…";
+    const data = { title: ev.title.trim().slice(0, 120), subtitle: ev.subtitle || "", date: ev.date || "", start: ev.start || "", end: ev.end || "", location: ev.location || "", address: ev.address || "", hostName: ev.hostName || "", description: ev.description || "",
+      timeline: (ev.timeline || []).filter(t => t.time || t.label), theme: ev.theme, banner: safeImg(ev.banner), access: ev.access, plusMax: ev.plusMax | 0, capacity: ev.capacity | 0,
+      deadline: ev.deadline ? Timestamp.fromDate(ev.deadline instanceof Date ? ev.deadline : deadlineDate(ev)) : null, showCount: !!ev.showCount,
+      questions: (ev.questions || []).filter(q => q.label.trim()), admins: (ev.admins || []).map(a => a.toLowerCase()), published: !!ev.published, updatedAt: serverTimestamp() };
+    try {
+      if (!eid) {
+        const id = rid(10);
+        await setDoc(doc(db, "events", id), { ...data, ownerUid: S.user.uid, ownerEmail: (S.user.email || "").toLowerCase(), createdAt: serverTimestamp() });
+        await setDoc(doc(db, "events", id, "meta", "count"), { yes: 0 });
+        dirty = false; toast("Event created"); location.hash = "#edit/" + id; return;
+      }
+      if (!isOwnerOfEvent) delete data.admins;
+      await updateDoc(doc(db, "events", eid), data); ev = { ...ev, ...data, deadline: data.deadline }; dirty = false; $("#dirty").textContent = "Saved"; drawShare(); drawAccess(); toast(ev.published ? "Saved. Your invitation is live." : "Saved as a draft");
+    } catch (e) { console.error(e); toast(/too large|exceeds/i.test(e.message || "") ? "The banner is too large. Try a smaller image." : "Couldn't save. Check your connection and try again."); }
+    btn.disabled = false; btn.textContent = "Save";
+  };
+  const del = $("#del"); if (del) { let armed = false; del.onclick = async () => {
+    if (!armed) { armed = true; del.textContent = "Tap again to delete"; setTimeout(() => { armed = false; del.textContent = "Delete"; }, 4000); return; }
+    try { await deleteDoc(doc(db, "events", eid)); dirty = false; toast("Event deleted"); location.hash = ""; } catch { toast("Couldn't delete"); } }; }
+}
+
+/* ---------- responses ---------- */
+async function responses(eid) {
+  shell(`<div class="panel empty"><p class="muted">Loading responses…</p></div>`);
+  const s = await getDoc(doc(db, "events", eid)).catch(() => null);
+  if (!s || !s.exists()) { $("#main").innerHTML = `<div class="panel empty"><h2>Event not found</h2></div>`; return; }
+  const ev = s.data();
+  let rs = (await getDocs(collection(db, "events", eid, "rsvps")).catch(() => ({ docs: [] }))).docs.map(d => ({ id: d.id, ...d.data() }));
+  const invites = ev.access === "invite" ? (await getDocs(collection(db, "events", eid, "invites")).catch(() => ({ docs: [] }))).docs.map(d => ({ id: d.id, ...d.data() })) : [];
+  function draw() {
+    rs.sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0));
+    const going = rs.filter(r => r.attending), heads = going.reduce((n, r) => n + (r.partySize || 0), 0), no = rs.filter(r => !r.attending).length;
+    const qs = ev.questions || [];
+    const tallies = qs.filter(q => q.type === "choice").map(q => { const c = {}; going.forEach(r => { const v = r.answers?.[q.id]; if (v) c[v] = (c[v] || 0) + (r.partySize || 1); }); const max = Math.max(1, ...Object.values(c));
+      return `<div class="panel tally"><b>${esc(q.label)}</b> <span class="muted" style="font-size:13px">(counted per person)</span>${(q.options || []).map(o => `<div class="bar"><span>${esc(o)}</span><i style="width:${(c[o] || 0) / max * 100}%"></i><em>${c[o] || 0}</em></div>`).join("")}</div>`; }).join("");
+    const waiting = invites.filter(iv => !rs.some(r => r.id === iv.id));
+    $("#main").innerHTML = `<div class="dh"><div><h1>${esc(ev.title)}</h1><p class="muted" style="margin:4px 0 0">${esc(fmtDate(ev))}</p></div><div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn" href="#edit/${eid}">Edit</a><button class="btn" id="csv">Download CSV</button><a class="btn" href="#">← Your events</a></div></div>
+      <div class="stats"><div class="stat"><b>${heads}</b><span>People coming</span></div><div class="stat"><b>${going.length}</b><span>Yes RSVPs</span></div><div class="stat"><b>${no}</b><span>Can't make it</span></div>
+        ${ev.capacity ? `<div class="stat"><b>${Math.max(ev.capacity - heads, 0)}</b><span>Spots left of ${ev.capacity}</span></div>` : ""}${invites.length ? `<div class="stat"><b>${waiting.length}</b><span>Invites not answered</span></div>` : ""}</div>
+      ${tallies ? `<div class="tallies">${tallies}</div>` : ""}
+      ${rs.length ? `<div class="tablewrap"><table class="resp"><thead><tr><th>Name</th><th>Coming</th><th>Group</th>${qs.map(q => `<th>${esc(q.label)}</th>`).join("")}<th>Note</th><th>Updated</th><th></th></tr></thead><tbody>
+        ${rs.map(r => `<tr><td><b>${esc(r.name)}</b></td><td class="${r.attending ? "yes" : "no"}">${r.attending ? "Yes" : "No"}</td><td>${r.attending ? r.partySize : ""}</td>${qs.map(q => `<td>${esc(r.answers?.[q.id] ?? "")}</td>`).join("")}<td>${esc(r.note || "")}</td><td class="muted">${r.updatedAt?.toDate ? esc(r.updatedAt.toDate().toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })) : ""}</td><td><button class="xbtn" data-rdel="${r.id}">Remove</button></td></tr>`).join("")}
+      </tbody></table></div>` : `<div class="panel empty"><h2>No RSVPs yet</h2><p class="muted">Share the invitation link and answers will show up here.</p></div>`}
+      ${waiting.length ? `<h2 style="font-size:22px;text-transform:uppercase;margin:22px 0 8px">Waiting to hear from</h2><div class="chips">${waiting.map(w => `<span class="chip" style="padding-right:12px">${esc(w.name)}</span>`).join("")}</div>` : ""}`;
+    $("#csv").onclick = () => {
+      const cell = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+      const rows = [["Name", "Coming", "Group size", ...qs.map(q => q.label), "Note"], ...rs.map(r => [r.name, r.attending ? "Yes" : "No", r.attending ? r.partySize : 0, ...qs.map(q => r.answers?.[q.id] ?? ""), r.note || ""])];
+      const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([rows.map(r => r.map(cell).join(",")).join("\n")], { type: "text/csv" })); a.download = (ev.title || "rsvps").replace(/[^\w]+/g, "-") + "-rsvps.csv"; a.click();
+    };
+    document.querySelectorAll("[data-rdel]").forEach(b => { let armed = false; b.onclick = async () => {
+      if (!armed) { armed = true; b.textContent = "Tap again"; setTimeout(() => { armed = false; b.textContent = "Remove"; }, 4000); return; }
+      const r = rs.find(x => x.id === b.dataset.rdel);
+      try { const cs = await getDoc(doc(db, "events", eid, "meta", "count")); const before = cs.exists() ? cs.data().yes : 0;
+        const bt = writeBatch(db); bt.delete(doc(db, "events", eid, "rsvps", r.id)); bt.set(doc(db, "events", eid, "meta", "count"), { yes: Math.max(0, before - (r.attending ? r.partySize : 0)) }); await bt.commit();
+        rs = rs.filter(x => x.id !== r.id); draw(); toast("Removed"); } catch { toast("Couldn't remove"); } }; });
+  }
+  draw();
+}
+
+/* ---------- site owner: approve hosts ---------- */
+async function hostsPage() {
+  shell(`<div class="dh"><div><h1>Hosts</h1><p class="muted" style="margin:4px 0 0">Approve who can create events.</p></div><a class="btn" href="#">← Your events</a></div><div id="hl" class="panel"><p class="muted">Loading…</p></div>`);
+  const s = await getDocs(collection(db, "hosts")).catch(() => null); const hs = s ? s.docs.map(d => ({ id: d.id, ...d.data() })) : [];
+  const order = { pending: 0, approved: 1, denied: 2 };
+  hs.sort((a, b) => order[a.status] - order[b.status]);
+  $("#hl").innerHTML = hs.length ? `<table class="invtable"><thead><tr><th>Name</th><th>Email</th><th>Status</th><th></th></tr></thead><tbody>${hs.map(h => `<tr><td>${esc(h.name)}</td><td>${esc(h.email)}</td><td><span class="pill ${h.status === "approved" ? "live" : "draft"}">${esc(h.status)}</span></td>
+    <td style="text-align:right">${h.status !== "approved" ? `<button class="btn small" data-ok="${h.id}">Approve</button>` : ""} ${h.status !== "denied" ? `<button class="btn small danger" data-no="${h.id}">${h.status === "approved" ? "Revoke" : "Deny"}</button>` : ""}</td></tr>`).join("")}</tbody></table>`
+    : `<p class="muted">No requests yet. When someone signs in and asks to host, they'll show up here.</p>`;
+  const set = async (id, status) => { try { await updateDoc(doc(db, "hosts", id), { status }); hostsPage(); } catch { toast("Couldn't update"); } };
+  document.querySelectorAll("[data-ok]").forEach(b => b.onclick = () => set(b.dataset.ok, "approved"));
+  document.querySelectorAll("[data-no]").forEach(b => b.onclick = () => set(b.dataset.no, "denied"));
+}
+
+/* ---------- routing ---------- */
+async function route() {
+  const eid = params.get("e");
+  if (eid) return guestView(eid);
+  if (!S.user) return landing();
+  if (S.role !== "owner" && S.role !== "host" && S.role !== "cohost") return waitingRoom();
+  window.onbeforeunload = null;
+  const h = location.hash.slice(1);
+  if (h === "new") return S.role === "cohost" ? dashboard() : builder(null);
+  if (h.startsWith("edit/")) return builder(h.slice(5));
+  if (h.startsWith("responses/")) return responses(h.slice(10));
+  if (h === "hosts" && S.role === "owner") return hostsPage();
+  return dashboard();
+}
+window.addEventListener("hashchange", () => { if (!params.get("e")) route(); });
+if (!CFG.firebase || /PASTE/.test(CFG.firebase.apiKey || "")) {
+  $("#app").innerHTML = `<div class="wrap"><div class="panel empty"><h2>Almost ready</h2><p class="muted">Add your Firebase settings to <b>config.js</b> (see the README, step 3), then reload.</p></div></div>`;
+} else if (params.get("e")) { guestView(params.get("e")); }
+else onAuthStateChanged(auth, async u => { S.user = u; await loadRole(); route(); });
+</script>
+</body>
+</html>
