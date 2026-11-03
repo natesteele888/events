@@ -1,4 +1,10 @@
 node_modules/
+tests/send-reminders.mjs
+tests/reminder-logic.mjs
+tests/firebase.json
+tests/firestore.rules
+tests/package-lock.json
+scripts/package-lock.json
 .DS_Store
 *-debug.log
 ._*

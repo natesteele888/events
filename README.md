@@ -1,70 +1,108 @@
 # Steele Events
 
-Invitations and RSVPs for any event: birthdays, team parties, league nights.
-Hosts build an invite on screen (colors, banner, schedule, questions, guest limits), share one link,
-and see every answer in one place. Guests RSVP from their phone with no account.
-
-This replaces the old per-event Apps Script setup.
+Invitations, RSVPs and wishlists for any event. Anyone can sign in with their email and become a host.
+Each host sets the look, gets an access code to share, and sees the guest list and comments in one place.
+Guests never need an account.
 
 ## How it fits together
 
 ```mermaid
 flowchart LR
-  G[Guest phone<br/>?e=EVENT] -->|reads invite, sends RSVP| FS[(Firestore)]
-  H[Host<br/>Google sign-in] -->|builds and edits events| FS
-  O[You, the owner] -->|approve hosts| FS
-  FS -. security rules decide<br/>who can do what .- R[firestore.rules]
-  P[GitHub Pages<br/>natesteele888.github.io/events] --> G
+  G[Guest phone] -->|types the code, RSVPs| FS[(Firestore)]
+  H[Host<br/>email or Google sign-in] -->|builds events, reads guest list| FS
+  FS -. firestore.rules decide<br/>who can do what .- R[firestore.rules]
+  P[GitHub Pages] --> G
   P --> H
+  A[GitHub Actions<br/>every hour] -->|finds who's due| FS
+  A -->|emails| M[Gmail SMTP]
+  M --> G
 ```
 
 | Who | Can do |
 |---|---|
-| **You** (the site owner) | Everything, plus approve hosts on the **Hosts** page |
-| **Approved host** | Create events, edit and delete their own, add co-hosts |
-| **Co-host** (an email the host adds) | Edit that event and see responses. Can't delete it or change co-hosts |
-| **Guest** (no login) | Open a published invite, RSVP, change their own RSVP with their private link |
+| **Host** (any verified email) | Create events, edit and delete their own, add co-hosts, see their guest list |
+| **Co-host** (an email the host adds) | Edit that event and see the guest list. Can't delete it or change co-hosts |
+| **Guest** (no login) | Open an invite with the code, RSVP, comment, ask for reminders, change their own RSVP |
+| **You** (site owner) | See all hosts on the **Hosts** page and block misuse |
 
-Guests never see each other's RSVPs. Capacity, plus-one limits, invite-only lists and the RSVP deadline
+Guests never see each other's answers. The code, capacity, plus-one limits, invite lists and RSVP deadline
 are enforced by the database rules, not just the screen.
+
+## How the access code works
+
+The event's details are stored in a document **named after the code**. Nobody can list those documents,
+so you can only open it by knowing the code. Before the code, a guest sees only the title, look and host name.
+Changing the code renames the document, so old codes stop working right away.
+
+```
+events/abc123              owner, co-hosts, code, limits  → host only
+events/abc123/public/card  title, colors, background      → anyone with the link
+events/abc123/locked/TIGER42  date, place, wishlist       → only if you know TIGER42
+events/abc123/rsvps/…      guest answers and emails       → hosts list them; a guest opens only their own
+codes/TIGER42              → points to abc123, so a guest can just type the code
+```
+
+A simple code keeps out casual visitors, not a determined attacker, because the database has no limit on guesses.
+Use **Invite list** for anything sensitive: each guest gets a long private link.
 
 ## Files
 
 | File | What it is |
 |---|---|
-| `index.html` | The whole app: guest invitation, host dashboard, event builder, responses |
-| `config.js` | Your Firebase settings (step 3) |
-| `firestore.rules` | Security rules (step 4). Sign in once, copy your User UID from Firebase Authentication → Users, and paste it on line 11 here and as `ownerUid` in `config.js` |
-| `tests/rules.test.mjs` | 41 checks that prove the rules (run with the Firestore emulator) |
+| `index.html` | The whole app |
+| `config.js` | Firebase settings (public by design) and your owner ID |
+| `firestore.rules` | Security rules. Your user ID goes on the `isSiteOwner` line |
+| `manifest.json`, `sw.js`, `icon-*.png` | Install to phone home screen |
+| `scripts/` | The reminder job |
+| `.github/workflows/reminders.yml` | Runs the reminder job every hour |
+| `.github/workflows/tests.yml` | Runs the rule tests and browser run on every push |
+| `tests/` | `rules.test.mjs` (security rules), `e2e.mjs` (full host and guest run) |
 
-## One-time setup (about 15 minutes)
+## Going live
 
-1. **Put it on GitHub.** In GitHub Desktop: *File → Add Local Repository →* choose `AutoNuvo_1/events` →
-   *create a repository* → commit → **Publish repository** (public, named `events`).
-2. **Create the Firebase project.** At console.firebase.google.com: *Add project* → name it `steele-events` →
-   keep the free Spark plan.
-   - *Build → Authentication → Get started → Google → Enable → Save.*
-   - *Authentication → Settings → Authorized domains → Add* `natesteele888.github.io`.
-   - *Build → Firestore Database → Create database →* production mode → location `us-east1`.
-3. **Connect the app.** *Project settings (gear) → Your apps → Web (`</>`) →* register `events` →
-   copy the `firebaseConfig` values into `config.js` (apiKey, authDomain, projectId, appId). Commit and push.
-   The API key is meant to be public; the rules are what protect the data.
-4. **Turn on the rules.** *Firestore → Rules →* replace everything with `firestore.rules` → **Publish**.
-5. **Turn on the site.** On GitHub: repo *Settings → Pages → Deploy from a branch → main / root → Save.*
-6. **Open** `https://natesteele888.github.io/events`, sign in with Google, and create your first event.
+Firebase project `steele-events` already exists, with Google sign-in, the GitHub Pages domain and Firestore.
+
+1. **Turn on email sign-in.** Firebase console → Authentication → Sign-in method → Add new provider → Email/Password → Enable.
+   Leave *Email link* off: on the free plan it's capped at 5 emails a day.
+2. **Set the owner.** Sign in to the app once, copy your User UID from Authentication → Users, and paste it in
+   `firestore.rules` (`PASTE_OWNER_UID`) and `config.js` (`ownerUid`).
+3. **Publish the rules.** Firestore → Rules → replace everything with `firestore.rules` → Publish.
+4. **Turn on the site.** GitHub repo → Settings → Pages → Deploy from a branch → main / root.
+
+## Turning on reminders
+
+Automatic reminders need something running on a schedule. Firebase's scheduled functions need the paid Blaze plan,
+so this uses a free GitHub Actions schedule instead. The guest list stays in Firebase and nothing personal is stored in GitHub.
+
+1. **Make a sending account.** Create a Gmail just for this (like `steele.events.reminders@gmail.com`), since guests see the address.
+   Turn on 2-Step Verification, then create an App Password.
+2. **Make a Firebase key.** Firebase console → Project settings → Service accounts → Generate new private key.
+   This file is a master key: never put it in the repo or a chat. Delete your download after step 3.
+3. **Add three secrets.** GitHub repo → Settings → Secrets and variables → Actions → New repository secret:
+   - `FIREBASE_SERVICE_ACCOUNT`: the whole key file's contents
+   - `SMTP_USER`: the Gmail address
+   - `SMTP_PASS`: the App Password
+4. **Test it.** Actions tab → *Send event reminders* → Run workflow. The log shows counts only.
+
+Until the secrets are added, the job does nothing and guests just don't get emails.
+GitHub logs on a public repo are public, so the job prints counts and never names or addresses.
+Gmail allows about 500 emails a day, which is plenty here.
 
 ## Everyday use
 
-- **New event:** Sign in → *＋ New event* → fill Details, Look, Guests, Questions → tick **Published** → **Save**.
-  The share box gives you the link and a QR code.
-- **Invite-only:** Guests → *Invite list only* → Save → paste names (one per line) → copy each guest's personal link.
-- **Co-hosts:** Co-hosts section → add their Google email. They sign in at the same address and see the event.
-- **New hosts:** They sign in and tap *Request host access*. You approve them on the **Hosts** page.
-- **Responses:** headcount, spots left, answers per question (counted per person), CSV download.
+- **New event:** Sign in → *＋ New event* → fill it in → tick **Published** → **Save**. The share box gives you the code, a link, a QR code and a ready-to-send message.
+- **Guest list:** *Guest list* on any event: headcount, answers, comments, reminder status, search, CSV.
+- **Wishlist:** add items with a link, name, price, a short note and an optional photo.
+- **Add to calendar:** the guest's calendar file also carries a 1-day alert, separate from emails.
 
 ## Limits worth knowing
 
-- Banners are resized in the browser and stored with the event (free plan, no Firebase Storage).
-- The headcount is kept in one counter document so capacity works without exposing the guest list.
-  If two guests RSVP in the same second, one gets "try again".
-- Removing an RSVP from the Responses page updates the headcount automatically.
+- Images are resized in the browser and stored with the event (free plan, no Firebase Storage). Scheduled backups aren't on the free plan either.
+- A single event holds up to 30 wishlist items.
+- If two guests RSVP in the same second, one gets "try again".
+- Reminder timing is on the hour-ish: GitHub schedules can run late when it's busy.
+- Someone who RSVPs after a reminder's moment has passed doesn't get that one, only later ones.
+
+## Running the tests
+
+Happens automatically on every push (see the Actions tab). The rule tests need Java, Node and the Firebase emulators.
