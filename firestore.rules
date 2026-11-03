@@ -1,36 +1,57 @@
 rules_version = '2';
 // Steele Events security rules.
-// Roles: site owner (you) -> approved hosts -> each event's owner + co-hosts -> guests (no login).
+// Anyone with a verified email can host. Hosts run their own events; guests never sign in.
+//
+//   events/{e}                 host-only settings (owner, co-hosts, access code, limits)
+//   events/{e}/public/card     what the gate page shows before the code: title, look, host name
+//   events/{e}/locked/{code}   date, place, details, questions, wishlist. The doc id IS the code,
+//                              so only someone who knows the code can open it
+//   events/{e}/rsvps/{key}     guest answers. The id is the guest's private key; hosts list them
+//   events/{e}/reminderLog/*   written only by the reminder job (no client access at all)
+//   codes/{CODE}               code -> event id, so guests can just type a code
 service cloud.firestore {
   match /databases/{database}/documents {
 
     // ---- who is who ----------------------------------------------------
     function signedIn() { return request.auth != null; }
-    function email() { return signedIn() && request.auth.token.email != null ? request.auth.token.email.lower() : ''; }
-    function isSiteOwner() {
-      return signedIn() && request.auth.uid == 'PASTE_OWNER_UID';
-    }
+    function verified() { return signedIn() && request.auth.token.get('email_verified', false) == true; }
+    // An unverified password account can claim any address, so it never counts as that address.
+    function email() { return verified() && request.auth.token.get('email', null) != null ? request.auth.token.email.lower() : ''; }
+    function isSiteOwner() { return signedIn() && request.auth.uid == 'PASTE_OWNER_UID'; }
     function hostDoc() { return /databases/$(database)/documents/hosts/$(request.auth.uid); }
     function isHost() {
-      return isSiteOwner() || (signedIn() && exists(hostDoc()) && get(hostDoc()).data.status == 'approved');
+      return isSiteOwner() || (verified() && (!exists(hostDoc()) || get(hostDoc()).data.status != 'blocked'));
     }
     function eventPath(e) { return /databases/$(database)/documents/events/$(e); }
     function ev(e) { return get(eventPath(e)).data; }
     function isEventAdminOf(d) {
-      return isSiteOwner() || (signedIn() && (d.ownerUid == request.auth.uid || email() in d.admins));
+      return isSiteOwner() || (signedIn() && (d.ownerUid == request.auth.uid || (email() != '' && email() in d.admins)));
     }
     function isEventAdmin(e) { return isEventAdminOf(ev(e)); }
+    // For batches that write the event and its parts together.
+    function adminAfter(e) { return isEventAdminOf(getAfter(eventPath(e)).data); }
 
-    // ---- host access requests ------------------------------------------
+    // ---- host directory: lets the site owner see who hosts and block abuse --
     match /hosts/{uid} {
       allow get: if signedIn() && (request.auth.uid == uid || isSiteOwner());
       allow list: if isSiteOwner();
-      // Anyone signed in can ask; only the site owner can approve.
-      allow create: if isSiteOwner() || (signedIn() && request.auth.uid == uid
-        && request.resource.data.status == 'pending'
+      allow create: if isSiteOwner() || (verified() && request.auth.uid == uid
+        && request.resource.data.status == 'active'
         && request.resource.data.email == email()
-        && request.resource.data.keys().hasOnly(['email', 'name', 'status', 'requestedAt']));
+        && request.resource.data.keys().hasOnly(['email', 'name', 'status', 'createdAt']));
       allow update, delete: if isSiteOwner();
+    }
+
+    // ---- access codes ----------------------------------------------------
+    match /codes/{code} {
+      allow get: if true;
+      allow list: if false;
+      // Creating over an existing code counts as an update, which is denied: codes can't be stolen.
+      allow create: if signedIn() && code.matches('^[A-Z0-9]{4,12}$')
+        && request.resource.data.keys().hasOnly(['e'])
+        && adminAfter(request.resource.data.e)
+        && getAfter(eventPath(request.resource.data.e)).data.code == code;
+      allow delete: if signedIn() && isEventAdmin(resource.data.e);
     }
 
     // ---- events ----------------------------------------------------------
@@ -39,15 +60,15 @@ service cloud.firestore {
         return d.title is string && d.title.size() > 0 && d.title.size() <= 120
           && d.ownerUid is string
           && d.admins is list && d.admins.size() <= 20
-          && d.access in ['open', 'invite']
+          && d.access in ['code', 'open', 'invite']
+          && d.code is string && d.code.matches('^[A-Z0-9]{4,12}$')
           && d.published is bool
           && d.plusMax is int && d.plusMax >= 0 && d.plusMax <= 20
-          && d.capacity is int && d.capacity >= 0
-          && (!('banner' in d) || d.banner == null || (d.banner is string && d.banner.size() < 900000));
+          && d.capacity is int && d.capacity >= 0;
       }
-      allow get: if resource.data.published == true || isEventAdminOf(resource.data);
+      allow get: if isEventAdminOf(resource.data);
       allow list: if isSiteOwner()
-        || (signedIn() && (resource.data.ownerUid == request.auth.uid || email() in resource.data.admins));
+        || (signedIn() && (resource.data.ownerUid == request.auth.uid || (email() != '' && email() in resource.data.admins)));
       allow create: if isHost()
         && request.resource.data.ownerUid == request.auth.uid
         && validEvent(request.resource.data);
@@ -59,17 +80,37 @@ service cloud.firestore {
             || resource.data.ownerUid == request.auth.uid || isSiteOwner());
       allow delete: if resource.data.ownerUid == request.auth.uid || isSiteOwner();
 
-      // Named guests for invite-only events. Guests can open their own invite by its secret id.
+      match /public/{c} {
+        function hex(s) { return s is string && s.matches('^#[0-9a-fA-F]{6}$'); }
+        function validCard(d) {
+          return d.title is string && d.title.size() <= 120
+            && hex(d.theme.primary) && hex(d.theme.accent) && hex(d.theme.bg) && hex(d.theme.text)
+            && (d.image == null || (d.image is string && d.image.size() < 900000
+                && d.image.matches('^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$')));
+        }
+        allow get: if c == 'card' && (ev(e).published == true || isEventAdmin(e));
+        allow create, update: if c == 'card' && adminAfter(e) && validCard(request.resource.data);
+        allow delete: if isEventAdmin(e);
+      }
+
+      match /locked/{k} {
+        allow get: if (ev(e).published == true && k == ev(e).code) || isEventAdmin(e);
+        allow create, update: if adminAfter(e) && k == getAfter(eventPath(e)).data.code
+          && (!('wishlist' in request.resource.data) || request.resource.data.wishlist.size() <= 40);
+        allow delete: if isEventAdmin(e);
+      }
+
+      // Named guests for invite-only events. A guest opens their own invite by its secret id.
       match /invites/{i} {
         allow get: if ev(e).published == true || isEventAdmin(e);
         allow list, create, update, delete: if isEventAdmin(e);
       }
 
-      // Running headcount, so capacity can be enforced without guests seeing each other's RSVPs.
+      // Running headcount, so capacity works without guests seeing each other's RSVPs.
       match /meta/{m} {
         allow get: if ev(e).published == true || isEventAdmin(e);
-        allow create, update, delete: if isEventAdmin(e)
-          || (m == 'count' && ev(e).published == true && countChangeOk(e));
+        allow create, update: if adminAfter(e) || (m == 'count' && ev(e).published == true && countChangeOk(e));
+        allow delete: if isEventAdmin(e);
       }
       function countChangeOk(e) {
         let before = resource == null ? 0 : resource.data.yes;
@@ -77,16 +118,15 @@ service cloud.firestore {
         let limit = ev(e).plusMax + 1;
         return after is int && after >= 0 && after - before <= limit && before - after <= limit
           && (ev(e).capacity == 0 || after <= ev(e).capacity)
-          && request.resource.data.keys().hasOnly(['yes']);
+          && request.resource.data.keys().hasOnly(['yes', 'by'])
+          // only as part of writing a real RSVP in this same batch
+          && getAfter(/databases/$(database)/documents/events/$(e)/rsvps/$(request.resource.data.by)).data.updatedAt == request.time;
       }
 
-      // RSVPs. The document id is the guest's private key: guests can open and edit
-      // the one they know, but only hosts can list them all.
       match /rsvps/{r} {
         function open_() {
           let d = ev(e);
-          return d.published == true
-            && (!('deadline' in d) || d.deadline == null || request.time < d.deadline);
+          return d.published == true && (d.get('deadline', null) == null || request.time < d.deadline);
         }
         function countPath() { return /databases/$(database)/documents/events/$(e)/meta/count; }
         function countBefore() { return exists(countPath()) ? get(countPath()).data.yes : 0; }
@@ -97,18 +137,31 @@ service cloud.firestore {
             && x.attending is bool
             && x.partySize is int
             && (x.attending == false || (x.partySize >= 1 && x.partySize <= d.plusMax + 1))
-            && (!('note' in x) || (x.note is string && x.note.size() <= 1000))
-            && (!('answers' in x) || x.answers is map)
-            && x.keys().hasOnly(['name', 'attending', 'partySize', 'answers', 'note', 'inviteId', 'createdAt', 'updatedAt'])
-            // invite-only: the RSVP id must be the guest's invite id
-            && (d.access == 'open' || (exists(/databases/$(database)/documents/events/$(e)/invites/$(r)) && x.inviteId == r));
+            && x.get('note', '') is string && x.get('note', '').size() <= 1000
+            && x.get('answers', {}) is map
+            && x.get('email', '') is string && x.get('email', '').size() <= 254
+            && (x.get('remind', false) == false || x.get('email', '').matches('^[^@ ]+@[^@ ]+[.][^@ ]+$'))
+            && x.keys().hasOnly(['name', 'attending', 'partySize', 'answers', 'note', 'email', 'remind', 'code', 'inviteId', 'createdAt', 'updatedAt']);
+        }
+        // New RSVPs must show the right code, or for invite-only, be the guest's own invite.
+        function admitted(x) {
+          let d = ev(e);
+          return d.access == 'invite'
+            ? (exists(/databases/$(database)/documents/events/$(e)/invites/$(r)) && x.get('inviteId', '') == r)
+            : x.get('code', '') == d.code;
         }
         allow get: if true;
         allow list, delete: if isEventAdmin(e);
-        allow create: if (open_() || isEventAdmin(e)) && validRsvp(request.resource.data)
+        allow create: if validRsvp(request.resource.data)
+          && (isEventAdmin(e) || (open_() && admitted(request.resource.data)))
           && getAfter(countPath()).data.yes == countBefore() + heads(request.resource.data);
-        allow update: if (open_() || isEventAdmin(e)) && validRsvp(request.resource.data)
+        allow update: if
+          // stopping or starting reminders always works, even after the RSVP deadline
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['remind', 'updatedAt'])
+          && (request.resource.data.remind == false || resource.data.get('email', '') != '')
+          || (open_() || isEventAdmin(e)) && validRsvp(request.resource.data)
           && request.resource.data.get('inviteId', null) == resource.data.get('inviteId', null)
+          && request.resource.data.get('code', null) == resource.data.get('code', null)
           && getAfter(countPath()).data.yes == countBefore() - heads(resource.data) + heads(request.resource.data);
       }
     }
