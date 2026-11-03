@@ -4,7 +4,7 @@ import fs from "node:fs";
 
 const env = await initializeTestEnvironment({
   projectId: "steele-events-test",
-  firestore: { rules: fs.readFileSync(process.argv[2], "utf8").replace("PASTE_OWNER_UID", "u_owner"), host: "127.0.0.1", port: 8080 },
+  firestore: { rules: fs.readFileSync(process.argv[2], "utf8").replace(/isSiteOwner\(\) \{ return signedIn\(\) && request.auth.uid == '[^']+'/, "isSiteOwner() { return signedIn() && request.auth.uid == 'u_owner'"), host: "127.0.0.1", port: 8080 },
 });
 const ctx = (uid, email, v = true) => env.authenticatedContext(uid, { email, email_verified: v }).firestore();
 const owner = ctx("u_owner", "owner@example.com");

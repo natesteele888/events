@@ -51,7 +51,7 @@ Use **Invite list** for anything sensitive: each guest gets a long private link.
 |---|---|
 | `index.html` | The whole app |
 | `config.js` | Firebase settings (public by design) and your owner ID |
-| `firestore.rules` | Security rules. Your user ID goes on the `isSiteOwner` line |
+| `firestore.rules` | Security rules. Your user ID is on the `isSiteOwner` line |
 | `manifest.json`, `sw.js`, `icon-*.png` | Install to phone home screen |
 | `scripts/` | The reminder job |
 | `.github/workflows/reminders.yml` | Runs the reminder job every hour |

@@ -2,7 +2,7 @@
 window.EVENTS_CONFIG = {
   appName: "Steele Events",
   // The Firebase user ID of the site owner, who can see all hosts and block misuse. Must match firestore.rules.
-  ownerUid: "PASTE_OWNER_UID",
+  ownerUid: "wIDnQAsPOdOMo6CToQDTt3YcZ5u2",
   firebase: {
     apiKey: "AIzaSyBkO0WQVH_F-OZaqWMRhzmdiooRf79JH5Q",
     authDomain: "steele-events.firebaseapp.com",

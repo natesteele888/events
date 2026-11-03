@@ -17,7 +17,7 @@ service cloud.firestore {
     function verified() { return signedIn() && request.auth.token.get('email_verified', false) == true; }
     // An unverified password account can claim any address, so it never counts as that address.
     function email() { return verified() && request.auth.token.get('email', null) != null ? request.auth.token.email.lower() : ''; }
-    function isSiteOwner() { return signedIn() && request.auth.uid == 'PASTE_OWNER_UID'; }
+    function isSiteOwner() { return signedIn() && request.auth.uid == 'wIDnQAsPOdOMo6CToQDTt3YcZ5u2'; }
     function hostDoc() { return /databases/$(database)/documents/hosts/$(request.auth.uid); }
     function isHost() {
       return isSiteOwner() || (verified() && (!exists(hostDoc()) || get(hostDoc()).data.status != 'blocked'));
