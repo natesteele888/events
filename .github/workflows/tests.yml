@@ -21,6 +21,7 @@ jobs:
         run: |
           cp ../firebase.json ../firestore.rules .
           npx firebase emulators:exec --only firestore --project demo-events "node rules.test.mjs firestore.rules"
+      - run: pip install pillow
       - name: Full browser run
         working-directory: tests
         env:
