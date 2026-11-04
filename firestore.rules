@@ -113,15 +113,24 @@ service cloud.firestore {
         allow delete: if isEventAdmin(e);
       }
       function countChangeOk(e) {
+        let d = ev(e);
         let before = resource == null ? 0 : resource.data.yes;
         let after = request.resource.data.yes;
-        let limit = ev(e).plusMax + 1;
-        return after is int && after >= 0 && after - before <= limit && before - after <= limit
-          && (ev(e).capacity == 0 || after <= ev(e).capacity)
+        let rsvpPath = /databases/$(database)/documents/events/$(e)/rsvps/$(request.resource.data.by);
+        let rsvpAfter = getAfter(rsvpPath).data;
+        let headsBefore = exists(rsvpPath) ? countedHeads(get(rsvpPath).data) : 0;
+        return after is int && after >= 0
+          && (d.capacity == 0 || after <= d.capacity)
           && request.resource.data.keys().hasOnly(['yes', 'by'])
-          // only as part of writing a real RSVP in this same batch
-          && getAfter(/databases/$(database)/documents/events/$(e)/rsvps/$(request.resource.data.by)).data.updatedAt == request.time;
+          // same RSVP deadline as the RSVP itself (hosts go through adminAfter instead)
+          && (d.get('deadline', null) == null || request.time < d.deadline)
+          // only as part of writing a real RSVP in this same batch...
+          && rsvpAfter.updatedAt == request.time
+          // ...and only by exactly that RSVP's own change in heads. A reminders-only
+          // save leaves heads alone, so it can't move the count at all.
+          && after - before == countedHeads(rsvpAfter) - headsBefore;
       }
+      function countedHeads(x) { return x.attending == true ? x.partySize : 0; }
 
       match /rsvps/{r} {
         function open_() {
@@ -159,6 +168,8 @@ service cloud.firestore {
           // stopping or starting reminders always works, even after the RSVP deadline
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['remind', 'updatedAt'])
           && (request.resource.data.remind == false || resource.data.get('email', '') != '')
+          // and it never moves the headcount
+          && (!existsAfter(countPath()) || getAfter(countPath()).data.yes == countBefore())
           || (open_() || isEventAdmin(e)) && validRsvp(request.resource.data)
           && request.resource.data.get('inviteId', null) == resource.data.get('inviteId', null)
           && request.resource.data.get('code', null) == resource.data.get('code', null)

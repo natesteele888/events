@@ -111,6 +111,11 @@ await ok("co-host sees the guest list", getDocs(collection(cohost, "events/e1/rs
 await no("unknown fields rejected", send(guest, "e1", "r5", { ...rsvp({ name: "Q" }), admin: true }, 3));
 
 console.log("Reminders");
+async function remindSave(db, e, id, newYes) { const b = writeBatch(db); b.update(doc(db, `events/${e}/rsvps/${id}`), { remind: false, updatedAt: serverTimestamp() }); b.set(doc(db, `events/${e}/meta/count`), { yes: newYes, by: id }); return b.commit(); }
+await no("a reminders-only save can't raise the headcount", remindSave(guest, "e1", "r_rem", 5));
+await no("a reminders-only save can't lower the headcount", remindSave(guest, "e1", "r_rem", 0));
+await no("the reminder shortcut can't move the headcount after the deadline", remindSave(guest, "late", "r_late", 1));
+await no("headcount must match the RSVP's real change", send(guest, "e1", "r_rem", rsvp({ name: "Ann", partySize: 1, email: "ann@example.com", remind: true, updatedAt: serverTimestamp() }), 3));
 await ok("guest stops reminders from the email link", updateDoc(doc(guest, "events/e1/rsvps/r_rem"), { remind: false, updatedAt: serverTimestamp() }));
 await ok("stopping reminders still works after the deadline", updateDoc(doc(guest, "events/late/rsvps/r_late"), { remind: false, updatedAt: serverTimestamp() }));
 await no("that shortcut can't change anything else", updateDoc(doc(guest, "events/late/rsvps/r_late"), { remind: false, name: "Changed" }));
