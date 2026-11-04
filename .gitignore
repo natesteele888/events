@@ -9,3 +9,4 @@ scripts/package-lock.json
 *-debug.log
 ._*
 .write-test
+.firebase/
