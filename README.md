@@ -101,4 +101,15 @@ Gmail allows about 500 emails a day, which is plenty here.
 
 ## Running the tests
 
-Happens automatically on every push (see the Actions tab). The rule tests need Java, Node and the Firebase emulators.
+Happens automatically on every push (see the Actions tab). To run them yourself from a fresh copy
+you need Node 22, Java 21 and Python with Pillow (`pip install pillow`, for the browser run's test image):
+
+```
+cd tests
+npm install
+npx playwright install chromium   # first time only
+npm test                          # rule checks, then the full browser run
+```
+
+`npm run test:rules` runs only the security rules (74 checks, needs Java). `npm run test:e2e` runs only the
+host-and-guest browser run in `tests/e2e.mjs` (38 checks). Both start and stop the Firebase emulators themselves.
