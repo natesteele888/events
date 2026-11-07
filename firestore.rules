@@ -119,6 +119,7 @@ service cloud.firestore {
       }
       function headsOf(x) { return x.attending == true ? x.partySize : 0; }
       function countChangeOk(e) {
+        let d = ev(e);
         let before = resource == null ? 0 : resource.data.yes;
         let after = request.resource.data.yes;
         let limit = ev(e).plusMax + 1;
@@ -129,7 +130,8 @@ service cloud.firestore {
           && request.resource.data.keys().hasOnly(['yes', 'by'])
           // only as part of writing a real RSVP in this same batch
           && getAfter(rp).data.updatedAt == request.time
-          // and only by exactly the change in that RSVP's headcount
+          // and only by exactly the change in that RSVP's headcount. A reminders-only
+          // save leaves heads alone, so it can't move the count at all.
           && after - before == headsOf(getAfter(rp).data) - (exists(rp) ? headsOf(get(rp).data) : 0);
       }
 
@@ -169,6 +171,8 @@ service cloud.firestore {
           // stopping or starting reminders always works, even after the RSVP deadline
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['remind', 'updatedAt'])
           && (request.resource.data.remind == false || resource.data.get('email', '') != '')
+          // and it never moves the headcount
+          && (!existsAfter(countPath()) || getAfter(countPath()).data.yes == countBefore())
           || (open_() || isEventAdmin(e)) && validRsvp(request.resource.data)
           && request.resource.data.get('inviteId', null) == resource.data.get('inviteId', null)
           && request.resource.data.get('code', null) == resource.data.get('code', null)
