@@ -1,5 +1,5 @@
 // Network first: updates show right away; the saved copy is only for offline.
-const CACHE = "events-v1";
+const CACHE = "events-v2";
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", e => e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k.startsWith("events-") && k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())));
 self.addEventListener("fetch", e => {
