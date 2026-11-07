@@ -98,6 +98,9 @@ Gmail allows about 500 emails a day, which is plenty here.
 - If two guests RSVP in the same second, one gets "try again".
 - Reminder timing is on the hour-ish: GitHub schedules can run late when it's busy.
 - Someone who RSVPs after a reminder's moment has passed doesn't get that one, only later ones.
+- Reminder emails are capped so one event can't use up the sending Gmail: **150 per event** in total (all reminders together)
+  and **100 per hourly run** across all events. Past a limit the job skips the rest and the log says so, in counts only.
+  The numbers are at the top of `scripts/send-reminders.mjs`.
 
 ## Running the tests
 
@@ -111,5 +114,5 @@ npx playwright install chromium   # first time only
 npm test                          # rule checks, then the full browser run
 ```
 
-`npm run test:rules` runs only the security rules (77 checks, needs Java). `npm run test:e2e` runs only the
+`npm run test:rules` runs only the security rules (77 checks, needs Java). `npm run test:reminders` checks the reminder email limits. `npm run test:e2e` runs only the
 host-and-guest browser run in `tests/e2e.mjs` (38 checks). Both start and stop the Firebase emulators themselves.

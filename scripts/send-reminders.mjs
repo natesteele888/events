@@ -6,6 +6,9 @@ import nodemailer from "nodemailer";
 import { eventStartMs, dueFor } from "./reminder-logic.mjs";
 
 const E = process.env, DRY = E.REMINDER_DRY_RUN === "1";
+// Limits, so one event (or a stranger with a long list of addresses) can't use up the sending Gmail's ~500 a day.
+const MAX_PER_EVENT = +(E.REMINDER_MAX_PER_EVENT || 150); // emails one event can ever send, all reminders together
+const MAX_PER_RUN = +(E.REMINDER_MAX_PER_RUN || 100);     // emails one hourly run can send, all events together
 const SITE = (E.SITE_URL || "https://steele-events.web.app/").replace(/\/?$/, "/");
 const APP = "Steele Events";
 const FROM = E.SMTP_USER;
@@ -43,9 +46,10 @@ ${hasWish ? `<p>The wishlist is on the invitation too.</p>` : ""}
 }
 
 const now = Date.now();
-let sent = 0, failed = 0, eventsDue = 0;
+let sent = 0, failed = 0, eventsDue = 0, eventsCapped = 0, runCapped = false;
 const events = await db.collection("events").where("published", "==", true).select("code", "date", "start", "tz", "reminders").get();
 for (const eSnap of events.docs) {
+  if (sent >= MAX_PER_RUN) { runCapped = true; break; }
   const ev = eSnap.data(), eid = eSnap.id;
   if (!ev.reminders?.on || !ev.date || !(ev.reminders.days || []).length) continue;
   const startMs = eventStartMs(ev.date, ev.start, ev.tz);
@@ -55,9 +59,15 @@ for (const eSnap of events.docs) {
   if (rsvps.empty) continue;
   eventsDue++;
   const logRef = eSnap.ref.collection("reminderLog");
+  // Emails this event already sent: every log entry except the skipped ones.
+  const [allLogs, skippedLogs] = await Promise.all([logRef.count().get(), logRef.where("skipped", "==", true).count().get()]);
+  let eventSent = allLogs.data().count - skippedLogs.data().count;
+  if (eventSent >= MAX_PER_EVENT) { eventsCapped++; continue; }
   const [cardS, lockS] = await Promise.all([eSnap.ref.collection("public").doc("card").get(), eSnap.ref.collection("locked").doc(ev.code).get()]);
   const card = cardS.data() || {}, lock = lockS.data() || {};
   for (const r of rsvps.docs) {
+    if (sent >= MAX_PER_RUN) { runCapped = true; break; }
+    if (eventSent >= MAX_PER_EVENT) { eventsCapped++; break; }
     const rsvp = r.data(); if (!rsvp.email) continue;
     const logs = await Promise.all(ev.reminders.days.map(d => logRef.doc(`${r.id}_${d}`).get()));
     const already = ev.reminders.days.filter((d, i) => logs[i].exists);
@@ -67,6 +77,7 @@ for (const eSnap of events.docs) {
     try {
       // Mark first: if this crashes between the two steps a guest misses one reminder instead of getting one every hour.
       await logRef.doc(`${r.id}_${send}`).create({ at: FieldValue.serverTimestamp() });
+      eventSent++;
       const mail = buildEmail({ ev, card, lock, rsvp, rsvpId: r.id, eid, startMs, to: rsvp.email });
       const info = await transport.sendMail(mail);
       if (DRY && E.REMINDER_DRY_OUT) { const fs = await import("node:fs"); fs.appendFileSync(E.REMINDER_DRY_OUT, info.message + "\n"); }
@@ -75,4 +86,5 @@ for (const eSnap of events.docs) {
   }
 }
 console.log(`Checked ${events.size} events, ${eventsDue} with reminders due. Sent ${sent}, failed ${failed}.`);
+if (eventsCapped || runCapped) console.log(`Limits: ${eventsCapped} events at the per-event limit (${MAX_PER_EVENT}), run limit (${MAX_PER_RUN}) ${runCapped ? "reached, the rest wait for the next run" : "not reached"}.`);
 process.exit(failed && !sent ? 1 : 0);
