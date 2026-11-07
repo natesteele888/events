@@ -241,11 +241,27 @@ table.resp th{border-top:0;font-size:12px;text-transform:uppercase;letter-spacin
 <body>
 <div id="app"><div class="wrap"><div class="panel empty"><h2>Loading…</h2></div></div></div>
 
-<script type="module">
+<script>
+// Runs even when Firebase can't load. Without this, weak signal left "Loading…" up forever
+// and the offline copy was never saved, because both lived inside the module below.
+(function () {
+  var q = new URLSearchParams(location.search);
+  var emu = q.has("emu") && /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+  if ("serviceWorker" in navigator && !emu) navigator.serviceWorker.register("sw.js").catch(function () {});
+  window.eventsBootFailed = function () {
+    if (window.EVENTS_STARTED) return;
+    var app = document.getElementById("app");
+    app.innerHTML = '<div class="wrap"><div class="panel empty"><h2>Can\u2019t reach Steele Events</h2><p class="muted">Check your signal, then try again.</p><button class="btn" type="button" onclick="location.reload()">Try again</button></div></div>';
+  };
+  setTimeout(window.eventsBootFailed, 12000);
+})();
+</script>
+<script type="module" onerror="eventsBootFailed()">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithPopup, signInWithRedirect, GoogleAuthProvider, signOut, connectAuthEmulator, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendEmailVerification, sendPasswordResetEmail, updateProfile } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import { getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, setDoc, updateDoc, collection, query, where, writeBatch, serverTimestamp, Timestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
+window.EVENTS_STARTED = true;
 const CFG = window.EVENTS_CONFIG || {};
 const OWNER = CFG.ownerUid || "";
 const fb = initializeApp(CFG.firebase || {});
@@ -930,7 +946,6 @@ async function route() {
   if (h === "hosts" && S.role === "owner") return hostsPage();
   return dashboard();
 }
-if ("serviceWorker" in navigator && !EMU) navigator.serviceWorker.register("sw.js").catch(() => {});
 window.addEventListener("hashchange", () => { if (!params.get("e")) route(); });
 if (!CFG.firebase || /PASTE/.test(CFG.firebase.apiKey || "")) {
   $("#app").innerHTML = `<div class="wrap"><div class="panel empty"><h2>Almost ready</h2><p class="muted">Add your Firebase settings to <b>config.js</b> (see the README), then reload.</p></div></div>`;
