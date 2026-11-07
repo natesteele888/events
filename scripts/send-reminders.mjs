@@ -47,11 +47,15 @@ ${hasWish ? `<p>The wishlist is on the invitation too.</p>` : ""}
 
 const now = Date.now();
 let sent = 0, failed = 0, eventsDue = 0, eventsCapped = 0, runCapped = false;
-const events = await db.collection("events").where("published", "==", true).select("code", "date", "start", "tz", "reminders").get();
+const events = await db.collection("events").where("published", "==", true).select("code", "date", "start", "tz", "reminders", "ownerUid").get();
+// Hosts blocked on the Hosts page: their events send nothing.
+const blockedHosts = new Set((await db.collection("hosts").where("status", "==", "blocked").get()).docs.map(d => d.id));
+let eventsBlocked = 0;
 for (const eSnap of events.docs) {
   if (sent >= MAX_PER_RUN) { runCapped = true; break; }
   const ev = eSnap.data(), eid = eSnap.id;
   if (!ev.reminders?.on || !ev.date || !(ev.reminders.days || []).length) continue;
+  if (blockedHosts.has(ev.ownerUid)) { eventsBlocked++; continue; }
   const startMs = eventStartMs(ev.date, ev.start, ev.tz);
   const maxLead = Math.max(...ev.reminders.days) * 86400000;
   if (now >= startMs || now < startMs - maxLead) continue;
@@ -86,5 +90,6 @@ for (const eSnap of events.docs) {
   }
 }
 console.log(`Checked ${events.size} events, ${eventsDue} with reminders due. Sent ${sent}, failed ${failed}.`);
+if (eventsBlocked) console.log(`Skipped ${eventsBlocked} events whose host is blocked.`);
 if (eventsCapped || runCapped) console.log(`Limits: ${eventsCapped} events at the per-event limit (${MAX_PER_EVENT}), run limit (${MAX_PER_RUN}) ${runCapped ? "reached, the rest wait for the next run" : "not reached"}.`);
 process.exit(failed && !sent ? 1 : 0);

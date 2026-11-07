@@ -22,6 +22,11 @@ service cloud.firestore {
     function isHost() {
       return isSiteOwner() || (verified() && (!exists(hostDoc()) || get(hostDoc()).data.status != 'blocked'));
     }
+    // Blocking a host on the Hosts page also freezes the events they own (only the site owner can still edit them).
+    function ownerNotBlocked(d) {
+      let h = /databases/$(database)/documents/hosts/$(d.ownerUid);
+      return isSiteOwner() || !exists(h) || get(h).data.status != 'blocked';
+    }
     function eventPath(e) { return /databases/$(database)/documents/events/$(e); }
     function ev(e) { return get(eventPath(e)).data; }
     function isEventAdminOf(d) {
@@ -73,7 +78,7 @@ service cloud.firestore {
         && request.resource.data.ownerUid == request.auth.uid
         && validEvent(request.resource.data);
       // Co-hosts can edit everything except who owns it and who the co-hosts are.
-      allow update: if isEventAdminOf(resource.data)
+      allow update: if isEventAdminOf(resource.data) && ownerNotBlocked(resource.data)
         && validEvent(request.resource.data)
         && request.resource.data.ownerUid == resource.data.ownerUid
         && (request.resource.data.admins == resource.data.admins
@@ -89,13 +94,13 @@ service cloud.firestore {
                 && d.image.matches('^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$')));
         }
         allow get: if c == 'card' && (ev(e).published == true || isEventAdmin(e));
-        allow create, update: if c == 'card' && adminAfter(e) && validCard(request.resource.data);
+        allow create, update: if c == 'card' && adminAfter(e) && ownerNotBlocked(getAfter(eventPath(e)).data) && validCard(request.resource.data);
         allow delete: if isEventAdmin(e);
       }
 
       match /locked/{k} {
         allow get: if (ev(e).published == true && k == ev(e).code) || isEventAdmin(e);
-        allow create, update: if adminAfter(e) && k == getAfter(eventPath(e)).data.code
+        allow create, update: if adminAfter(e) && ownerNotBlocked(getAfter(eventPath(e)).data) && k == getAfter(eventPath(e)).data.code
           && (!('wishlist' in request.resource.data) || request.resource.data.wishlist.size() <= 40);
         allow delete: if isEventAdmin(e);
       }
