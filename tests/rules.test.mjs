@@ -101,6 +101,10 @@ await no("headcount cannot change without a real RSVP", setDoc(doc(guest, "event
 await no("party bigger than allowed rejected", send(guest, "e1", "r4", rsvp({ partySize: 4 }), 6));
 await no("reminder without an email rejected", send(guest, "e1", "r6", rsvp({ remind: true }), 4));
 await ok("guest opts into reminders with an email", send(guest, "e1", "r_rem", rsvp({ name: "Ann", partySize: 1, email: "ann@example.com", remind: true }), 3));
+async function bump(db, e, id, newYes, rsvpChange) { const b = writeBatch(db); b.update(doc(db, `events/${e}/rsvps/${id}`), { ...rsvpChange, updatedAt: serverTimestamp() }); b.set(doc(db, `events/${e}/meta/count`), { yes: newYes, by: id }); return b.commit(); }
+await no("headcount cannot ride along on a reminder change", bump(guest, "e1", "r_rem", 6, { remind: true }));
+await no("headcount must match the RSVP saved with it", bump(guest, "e1", "r_rem", 4, { remind: false }));
+await no("headcount cannot change after the deadline", bump(guest, "late", "r_late", 1, { remind: false }));
 await ok("guest reads own RSVP by its key", getDoc(doc(guest, "events/e1/rsvps/r_sam")));
 await no("guest cannot list RSVPs (names, emails, comments)", getDocs(collection(guest, "events/e1/rsvps")));
 await no("stranger cannot list RSVPs", getDocs(collection(stranger, "events/e1/rsvps")));

@@ -112,15 +112,20 @@ service cloud.firestore {
         allow create, update: if adminAfter(e) || (m == 'count' && ev(e).published == true && countChangeOk(e));
         allow delete: if isEventAdmin(e);
       }
+      function headsOf(x) { return x.attending == true ? x.partySize : 0; }
       function countChangeOk(e) {
         let before = resource == null ? 0 : resource.data.yes;
         let after = request.resource.data.yes;
         let limit = ev(e).plusMax + 1;
+        let rp = /databases/$(database)/documents/events/$(e)/rsvps/$(request.resource.data.by);
         return after is int && after >= 0 && after - before <= limit && before - after <= limit
           && (ev(e).capacity == 0 || after <= ev(e).capacity)
+          && (ev(e).get('deadline', null) == null || request.time < ev(e).deadline)
           && request.resource.data.keys().hasOnly(['yes', 'by'])
           // only as part of writing a real RSVP in this same batch
-          && getAfter(/databases/$(database)/documents/events/$(e)/rsvps/$(request.resource.data.by)).data.updatedAt == request.time;
+          && getAfter(rp).data.updatedAt == request.time
+          // and only by exactly the change in that RSVP's headcount
+          && after - before == headsOf(getAfter(rp).data) - (exists(rp) ? headsOf(get(rp).data) : 0);
       }
 
       match /rsvps/{r} {

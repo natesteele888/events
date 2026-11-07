@@ -111,5 +111,5 @@ npx playwright install chromium   # first time only
 npm test                          # rule checks, then the full browser run
 ```
 
-`npm run test:rules` runs only the security rules (74 checks, needs Java). `npm run test:e2e` runs only the
+`npm run test:rules` runs only the security rules (77 checks, needs Java). `npm run test:e2e` runs only the
 host-and-guest browser run in `tests/e2e.mjs` (38 checks). Both start and stop the Firebase emulators themselves.
