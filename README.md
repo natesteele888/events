@@ -62,7 +62,7 @@ Use **Invite list** for anything sensitive: each guest gets a long private link.
 
 **https://steele-events.web.app** (Firebase Hosting, free). GitHub Pages stays on only to forward old links.
 
-To publish a change, from this folder: `npx firebase-tools deploy --only hosting --project steele-events`.
+Pushing to `main` publishes automatically once the tests pass (Tests workflow → deploy job). Manual fallback, from this folder: `npx firebase-tools deploy --only hosting --project steele-events`.
 Rule changes: `npx firebase-tools deploy --only firestore:rules --project steele-events`.
 
 ## Turning on reminders
