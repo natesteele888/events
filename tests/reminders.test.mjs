@@ -12,14 +12,15 @@ let pass = 0, fail = 0; const check = (n, ok, x = "") => { ok ? pass++ : fail++;
 // Two events starting in 6 hours, each with 5 guests who asked for the 1-day reminder.
 const start = new Date(Date.now() + 6 * 3600e3);
 const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(start).reduce((a, p) => (a[p.type] = p.value, a), {});
-for (const id of ["capA", "capB"]) {
+async function seed(id, ownerUid = "u_host") {
   const code = id.toUpperCase() + "1";
-  await db.doc(`events/${id}`).set({ title: "T", ownerUid: "u_host", admins: [], access: "code", code, published: true, plusMax: 2, capacity: 0,
+  await db.doc(`events/${id}`).set({ title: "T", ownerUid, admins: [], access: "code", code, published: true, plusMax: 2, capacity: 0,
     date: `${fmt.year}-${fmt.month}-${fmt.day}`, start: `${fmt.hour}:${fmt.minute}`, tz: "America/New_York", reminders: { on: true, days: [1] } });
   await db.doc(`events/${id}/public/card`).set({ title: "T", theme: { primary: "#112233" } });
   await db.doc(`events/${id}/locked/${code}`).set({ location: "x" });
   for (let i = 0; i < 5; i++) await db.doc(`events/${id}/rsvps/${id}_r${i}`).set({ name: "G", attending: true, partySize: 1, email: `g${i}@example.com`, remind: true, code, createdAt: new Date(Date.now() - 10 * 864e5) });
 }
+for (const id of ["capA", "capB"]) await seed(id);
 
 fs.rmSync(OUT + "/mail.jsonl", { force: true });
 const env = `FIRESTORE_EMULATOR_HOST=${process.env.FIRESTORE_EMULATOR_HOST} GCLOUD_PROJECT=demo-events REMINDER_DRY_RUN=1 REMINDER_DRY_OUT=${OUT}/mail.jsonl SMTP_USER=test@example.com REMINDER_MAX_PER_EVENT=3 REMINDER_MAX_PER_RUN=4`;
@@ -41,6 +42,12 @@ check("second run tops both events up to their limit", n.capA === 3 && n.capB ==
 check("log says events hit the per-event limit", /2 events at the per-event limit/.test(o2), o2);
 const o3 = run();
 check("third run sends nothing more", /Sent 0/.test(o3) && sentTo().length === 6, o3);
+
+console.log("Blocked host");
+await db.doc("hosts/u_bad").set({ email: "bad@example.com", status: "blocked" }); await seed("capC", "u_bad");
+const o4 = run(); console.log("   ", o4.trim().replace(/\n/g, "\n    "));
+check("a blocked host's event sends nothing", /Sent 0/.test(o4) && sentTo().length === 6, o4);
+check("log counts the blocked event", /Skipped 1 events whose host is blocked/.test(o4), o4);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

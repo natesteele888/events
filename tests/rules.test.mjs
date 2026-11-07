@@ -37,6 +37,7 @@ await env.withSecurityRulesDisabled(async c => { const f = c.firestore();
     await setDoc(doc(f, `events/${id}/meta/count`), { yes: id === "full" ? 2 : 0 }); await setDoc(doc(f, `codes/${e.code}`), { e: id });
   }
   await setDoc(doc(f, "hosts/u_bad"), { email: "bad@example.com", status: "blocked" });
+  { const e = ev({ ownerUid: "u_bad", code: "BADEV1" }); await setDoc(doc(f, "events/bev"), e); await setDoc(doc(f, "events/bev/public/card"), card()); await setDoc(doc(f, `events/bev/locked/${e.code}`), { location: "x" }); await setDoc(doc(f, `codes/${e.code}`), { e: "bev" }); }
   await setDoc(doc(f, "events/late/rsvps/r_late"), { name: "L", attending: false, partySize: 0, email: "l@example.com", remind: true, code: "LATE11", updatedAt: 1 });
 });
 
@@ -47,6 +48,11 @@ await no("blocked host cannot create an event", createAll(blocked, "b1", ev({ ow
 await ok("host can add themselves to the directory", setDoc(doc(stranger, "hosts/u_x"), { email: "x@example.com", name: "X", status: "active", createdAt: 1 }));
 await no("host cannot unblock themselves", updateDoc(doc(blocked, "hosts/u_bad"), { status: "active" }));
 await no("host cannot delete their block", deleteDoc(doc(blocked, "hosts/u_bad")));
+await no("blocked host cannot edit their existing event", updateDoc(doc(blocked, "events/bev"), { title: "Ad" }));
+await no("blocked host cannot change their event's card", setDoc(doc(blocked, "events/bev/public/card"), card({ title: "Ad" })));
+await no("blocked host cannot change their event's details", setDoc(doc(blocked, "events/bev/locked/BADEV1"), { location: "Ad" }));
+await no("co-host cannot edit a blocked host's event", updateDoc(doc(cohost, "events/bev"), { title: "Ad" }));
+await ok("site owner can still edit a blocked host's event", updateDoc(doc(owner, "events/bev"), { title: "Party" }));
 await ok("site owner can list hosts", getDocs(collection(owner, "hosts")));
 await no("host cannot list hosts", getDocs(collection(host, "hosts")));
 await no("cannot create an event owned by someone else", createAll(host, "e2", ev({ ownerUid: "u_other", code: "OTHER1" })));
