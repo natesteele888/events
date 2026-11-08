@@ -380,10 +380,12 @@ function invitationHTML(ev, opts = {}) {
 function icsFor(ev, eid) {
   const f = (d, t) => (d || "").replace(/-/g, "") + "T" + ((t || "12:00").replace(":", "")) + "00";
   const endT = ev.end || (ev.start ? String(Math.min(23, +ev.start.slice(0, 2) + 2)).padStart(2, "0") + ev.start.slice(2) : "14:00");
+  // 8pm to 12:30am ends the next day. Date.UTC rolls the month and year over for us.
+  const endDate = ev.date && ev.start && ev.end && ev.end < ev.start ? new Date(Date.UTC(+ev.date.slice(0, 4), +ev.date.slice(5, 7) - 1, +ev.date.slice(8, 10) + 1)).toISOString().slice(0, 10) : ev.date;
   const clean = s => String(s || "").replace(/[\;,]/g, m => "\\" + m).replace(/\r?\n/g, "\\n");
   const fold = l => { const o = []; while (l.length > 74) { o.push(l.slice(0, 74)); l = " " + l.slice(74); } o.push(l); return o.join("\r\n"); };
   return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Steele Events//EN", "BEGIN:VEVENT", "UID:" + (eid || "preview") + "@steele-events",
-    "DTSTAMP:" + new Date().toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z", "DTSTART:" + f(ev.date, ev.start), "DTEND:" + f(ev.date, endT),
+    "DTSTAMP:" + new Date().toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z", "DTSTART:" + f(ev.date, ev.start), "DTEND:" + f(endDate, endT),
     "SUMMARY:" + clean(ev.title), "LOCATION:" + clean([ev.location, ev.address].filter(Boolean).join(", ")), "DESCRIPTION:" + clean(location.href),
     "BEGIN:VALARM", "ACTION:DISPLAY", "DESCRIPTION:" + clean(ev.title), "TRIGGER:-P1D", "END:VALARM",
     "END:VEVENT", "END:VCALENDAR"].map(fold).join("\r\n");
