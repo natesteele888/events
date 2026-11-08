@@ -394,6 +394,8 @@ function wireIcs(root, ev, eid) {
     a.download = (ev.title || "event").replace(/[^\w]+/g, "-") + ".ics";
   });
 }
+// A failed read usually means weak signal, so say that. "Taken down" is only for a real refusal or a missing event.
+const signalCard = () => `<div class="panel empty"><h2>Can't reach Steele Events</h2><p class="muted">Check your signal, then try again.</p><button class="btn" type="button" onclick="location.reload()">Try again</button></div>`;
 const unavailable = () => { $("#app").innerHTML = `<div class="wrap"><div class="panel empty"><h2>This invitation isn't available</h2><p class="muted">It may have been taken down, or the link is incomplete. Check with the host.</p><a class="btn" href="${esc(siteUrl())}${EMU ? "?emu" : ""}">Enter a code</a></div></div>`; };
 
 async function guestView(eid) {
@@ -405,7 +407,9 @@ async function guestView(eid) {
     const done = await updateDoc(doc(db, "events", eid, "rsvps", rsvpId), { remind: false, updatedAt: serverTimestamp() }).then(() => true).catch(() => false);
     topHTML = `<p class="notice" style="background:#fff">${done ? "Reminders are off. You won't get any more emails about this event." : "We couldn't turn off reminders from this link. Please let the host know."}</p>`;
   }
-  const cardSnap = await getDoc(doc(db, "events", eid, "public", "card")).catch(() => null);
+  let readErr = null;
+  const cardSnap = await getDoc(doc(db, "events", eid, "public", "card")).catch(e => { readErr = e; return null; });
+  if (readErr && readErr.code !== "permission-denied") { app.innerHTML = `<div class="wrap">${signalCard()}</div>`; return; }
   if (!cardSnap || !cardSnap.exists()) return unavailable();
   const card = cardSnap.data(); document.title = card.title + " · RSVP";
 
@@ -577,15 +581,21 @@ function blockedRoom() { shell(`<div class="panel empty" style="max-width:560px;
 async function myEvents() {
   const em = (S.user.email || "").toLowerCase(); const out = new Map();
   const qs = S.role === "owner" ? [collection(db, "events")] : [query(collection(db, "events"), where("ownerUid", "==", S.user.uid)), query(collection(db, "events"), where("admins", "array-contains", em))];
-  for (const q of qs) { const s = await getDocs(q).catch(() => null); s && s.forEach(d => out.set(d.id, { id: d.id, ...d.data() })); }
+  let failed = 0;
+  for (const q of qs) { const s = await getDocs(q).catch(() => null);
+    // With no signal, getDocs usually doesn't fail: it hands back an empty answer marked "from cache".
+    if (!s || (s.empty && s.metadata.fromCache)) { failed++; continue; }
+    s.forEach(d => out.set(d.id, { id: d.id, ...d.data() })); }
+  if (failed === qs.length) throw new Error("no events read");
   return [...out.values()].sort((a, b) => (a.date || "9").localeCompare(b.date || "9"));
 }
 async function dashboard() {
   shell(`<div class="dh"><div><h1>Your events</h1><p class="muted" style="margin:4px 0 0">Everything you host or co-host.</p></div><a class="btn primary" href="#new">＋ New event</a></div><div id="list"><div class="panel empty"><p class="muted">Loading your events…</p></div></div>`);
   // Lists load slowly enough that the person may have moved on: never paint over the next page.
   const list = $("#list");
-  const evs = await myEvents();
+  const evs = await myEvents().catch(() => null);
   if (!list.isConnected) return;
+  if (!evs) { list.innerHTML = signalCard(); return; }
   if (!evs.length) { list.innerHTML = `<div class="panel empty"><h2>No events yet</h2><p class="muted">Create your first invitation. It takes about five minutes.</p><a class="btn primary" href="#new">＋ New event</a></div>`; return; }
   const cards = await Promise.all(evs.map(ev => getDoc(doc(db, "events", ev.id, "public", "card")).then(s => s.exists() ? s.data() : {}).catch(() => ({}))));
   if (!list.isConnected) return;
