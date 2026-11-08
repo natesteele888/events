@@ -47,7 +47,7 @@ a{color:var(--brand)}
 .btn:hover{border-color:var(--brand)}
 .btn.primary{background:var(--brand);border-color:var(--brand);color:var(--brand-ink)}
 .btn.danger{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 40%,var(--line))}
-.btn.small{padding:4px 10px;font-size:13px}
+.btn.small{padding:4px 10px;font-size:13px;min-height:36px}
 .btn:disabled{opacity:.55;cursor:default}
 .muted{color:var(--muted)}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-size:14px;z-index:50;max-width:calc(100% - 32px)}
@@ -110,10 +110,10 @@ label.f textarea{min-height:90px;resize:vertical}
 .seg{display:inline-flex;background:var(--sunk);border-radius:10px;padding:3px;gap:3px;flex-wrap:wrap}
 .seg button{border:0;background:transparent;border-radius:8px;padding:7px 14px;font-weight:600}
 .seg button[aria-pressed="true"]{background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.12)}
-.chk{display:flex;gap:8px;align-items:center;font-size:15px}
+.chk{display:flex;gap:8px;align-items:center;font-size:15px;min-height:36px}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chip{display:inline-flex;gap:6px;align-items:center;background:var(--sunk);border-radius:999px;padding:4px 6px 4px 12px;font-size:14px}
-.chip button{border:0;background:#fff;border-radius:50%;width:22px;height:22px;line-height:1;color:var(--muted)}
+.chip button{border:0;background:#fff;border-radius:50%;width:32px;height:32px;line-height:1;color:var(--muted)}
 .invtable{width:100%;border-collapse:collapse;font-size:14px}
 .invtable td,.invtable th{border-top:1px solid var(--line);padding:7px 6px;text-align:left;vertical-align:middle}
 .invtable th{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border-top:0}
@@ -189,7 +189,7 @@ table.resp th{border-top:0;font-size:12px;text-transform:uppercase;letter-spacin
 .authbox{display:grid;gap:10px}
 .authbox .or{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px}
 .authbox .or::before,.authbox .or::after{content:"";flex:1;border-top:1px solid var(--line)}
-.linkbtn{border:0;background:none;color:var(--brand);padding:0;font-size:14px;font-weight:600;text-decoration:underline}
+.linkbtn{border:0;background:none;color:var(--brand);padding:0;font-size:14px;font-weight:600;text-decoration:underline;min-height:36px}
 .doors{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;margin-top:22px;align-items:start}
 .codeinput{font-family:var(--f-head);font-size:30px;letter-spacing:.14em;text-transform:uppercase;text-align:center;border:2px solid var(--line);border-radius:12px;padding:10px;width:100%;background:#fff;color:var(--ink)}
 .errline{color:var(--bad);font-size:14px;font-weight:600;margin:0}
@@ -211,7 +211,7 @@ table.resp th{border-top:0;font-size:12px;text-transform:uppercase;letter-spacin
 .inv .item .price{font-weight:700;color:var(--a);font-size:14px}
 .inv .item .desc{font-size:14px;line-height:1.35;overflow-wrap:anywhere}
 .inv .item .store{font-size:12px;opacity:.7;margin-top:auto;padding-top:5px;overflow-wrap:anywhere}
-.inv .chkline{display:flex;gap:9px;align-items:flex-start;font-weight:600;font-size:15px}
+.inv .chkline{display:flex;gap:9px;align-items:flex-start;font-weight:600;font-size:15px;min-height:36px}
 .inv .chkline input{width:20px;height:20px;margin-top:1px;accent-color:var(--a);flex:none}
 .wrow{display:grid;grid-template-columns:72px minmax(0,1fr) auto;gap:10px;padding:10px;border:1px solid var(--line);border-radius:10px;align-items:start}
 .wrow .thumb{width:72px;height:72px;border-radius:8px;background:var(--sunk) center/cover no-repeat;display:grid;place-items:center;font-size:12px;color:var(--muted);cursor:pointer;text-align:center;overflow:hidden}
