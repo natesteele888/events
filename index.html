@@ -398,6 +398,9 @@ function wireIcs(root, ev, eid) {
 }
 // A failed read usually means weak signal, so say that. "Taken down" is only for a real refusal or a missing event.
 const signalCard = () => `<div class="panel empty"><h2>Can't reach Steele Events</h2><p class="muted">Check your signal, then try again.</p><button class="btn" type="button" onclick="location.reload()">Try again</button></div>`;
+// A dropped signal is not an answer. Only a refusal from the database means the thing isn't there for you.
+const failedRead = e => !!e && e.code !== "permission-denied";
+const NO_SIGNAL = "Can't reach Steele Events. Check your signal, then try again.";
 const unavailable = () => { $("#app").innerHTML = `<div class="wrap"><div class="panel empty"><h2>This invitation isn't available</h2><p class="muted">It may have been taken down, or the link is incomplete. Check with the host.</p><a class="btn" href="${esc(siteUrl())}${EMU ? "?emu" : ""}">Enter a code</a></div></div>`; };
 
 async function guestView(eid) {
@@ -415,12 +418,14 @@ async function guestView(eid) {
   if (!cardSnap || !cardSnap.exists()) return unavailable();
   const card = cardSnap.data(); document.title = card.title + " · RSVP";
 
-  let invite = null;
-  if (inviteId) { const iv = await getDoc(doc(db, "events", eid, "invites", inviteId)).catch(() => null); if (iv && iv.exists()) invite = iv.data(); }
-  const tryCode = async c => { c = cleanCode(c); if (!c) return null; const s = await getDoc(doc(db, "events", eid, "locked", c)).catch(() => null); return s && s.exists() ? { code: c, data: s.data() } : null; };
+  let invite = null, readFailed = false;
+  const noteFail = e => { if (failedRead(e)) readFailed = true; return null; };
+  if (inviteId) { const iv = await getDoc(doc(db, "events", eid, "invites", inviteId)).catch(noteFail); if (iv && iv.exists()) invite = iv.data(); }
+  const tryCode = async c => { c = cleanCode(c); if (!c) return null; const s = await getDoc(doc(db, "events", eid, "locked", c)).catch(noteFail); return s && s.exists() ? { code: c, data: s.data() } : null; };
 
   let opened = null;
-  for (const c of [invite && invite.code, card.openCode, params.get("c"), store.get("code:" + eid)]) { if (c && !opened) opened = await tryCode(c); }
+  for (const c of [invite && invite.code, card.openCode, params.get("c"), store.get("code:" + eid)]) { if (c && !opened && !readFailed) opened = await tryCode(c); }
+  if (!opened && readFailed) { app.innerHTML = `<div class="wrap">${signalCard()}</div>`; return; }
   if (!opened) return gate();
 
   function gate(errMsg) {
@@ -428,7 +433,8 @@ async function guestView(eid) {
     app.innerHTML = invShell(card, `${topHTML}<section class="card gate"><h2>Access code</h2>${card.hostName ? `<p style="margin-top:0">Hosted by <b>${esc(card.hostName)}</b></p>` : ""}
       <form id="gf" novalidate><label class="fld"><span>Enter the code from your host</span><input id="gc" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="12" value="${esc(params.get("c") || "")}"></label>
       <p class="err" id="ge" ${errMsg ? "" : "hidden"}>${esc(errMsg || "")}</p><button class="submit" id="gb">Open invitation</button></form></section>`);
-    $("#gf").onsubmit = async e => { e.preventDefault(); $("#gb").disabled = true; const r = await tryCode($("#gc").value);
+    $("#gf").onsubmit = async e => { e.preventDefault(); $("#gb").disabled = true; readFailed = false; const r = await tryCode($("#gc").value);
+      if (!r && readFailed) { $("#ge").textContent = NO_SIGNAL; $("#ge").hidden = false; $("#gb").disabled = false; return; }
       if (!r) return gate("That code didn't work. Check it with your host.");
       store.set("code:" + eid, r.code); opened = r; show(); };
   }
@@ -562,7 +568,9 @@ function landing(mode = "in") {
   [["#toUp", "up"], ["#toReset", "reset"], ["#toIn", "in"]].forEach(([s, m]) => { const b = $(s); if (b) b.onclick = () => landing(m); });
   $("#codeF").onsubmit = async e => { e.preventDefault(); const c = cleanCode($("#homeCode").value); const er = $("#codeErr");
     const bad = () => { er.textContent = "That code didn't work. Check it with your host."; er.hidden = false; };
-    if (!c) return bad(); const s = await getDoc(doc(db, "codes", c)).catch(() => null); if (!s || !s.exists()) return bad();
+    if (!c) return bad(); let readErr = null; const s = await getDoc(doc(db, "codes", c)).catch(e => { readErr = e; return null; });
+    if (failedRead(readErr)) { er.textContent = NO_SIGNAL; er.hidden = false; return; }
+    if (!s || !s.exists()) return bad();
     store.set("code:" + s.data().e, c); location.href = guestUrl(s.data().e, "&c=" + c); };
   $("#af").onsubmit = async e => { e.preventDefault(); const er = $("#aErr"); const fail = x => { er.textContent = AUTH_ERR[x.code] || "That didn't work. Try again."; er.hidden = false; };
     const email = $("#aEmail").value.trim(), pass = mode === "reset" ? "" : $("#aPass").value, newName = $("#aName") ? $("#aName").value.trim() : "";
@@ -619,7 +627,7 @@ async function shrinkImage(file, maxW = 1600, maxLen = 700000) {
   return out;
 }
 const loadFull = async eid => {
-  const s = await getDoc(doc(db, "events", eid)).catch(() => null); if (!s || !s.exists()) return null;
+  const s = await getDoc(doc(db, "events", eid)); if (!s.exists()) return null;
   const main = s.data();
   const [c, l] = await Promise.all([getDoc(doc(db, "events", eid, "public", "card")), getDoc(doc(db, "events", eid, "locked", main.code))]);
   return { ...blankEvent(), ...(c.exists() ? c.data() : {}), ...(l.exists() ? l.data() : {}), ...main };
@@ -627,7 +635,8 @@ const loadFull = async eid => {
 async function builder(eid) {
   let ev = blankEvent(), isOwnerOfEvent = true, invites = [];
   if (eid) {
-    const full = await loadFull(eid).catch(() => null);
+    let readErr = null; const full = await loadFull(eid).catch(e => { readErr = e; return null; });
+    if (failedRead(readErr)) { shell(signalCard()); return; }
     if (!full) { shell(`<div class="panel empty"><h2>Event not found</h2><a class="btn" href="#">Back to your events</a></div>`); return; }
     ev = full; isOwnerOfEvent = ev.ownerUid === S.user.uid || S.role === "owner";
     const iv = await getDocs(collection(db, "events", eid, "invites")).catch(() => null); invites = iv ? iv.docs.map(d => ({ id: d.id, ...d.data() })) : [];
@@ -885,8 +894,9 @@ function wireShare(eid, ev, root) {
 async function responses(eid) {
   shell(`<div class="panel empty"><p class="muted">Loading your guest list…</p></div>`);
   const here = $("#main");
-  const ev = await loadFull(eid).catch(() => null);
+  let readErr = null; const ev = await loadFull(eid).catch(e => { readErr = e; return null; });
   if (!here.isConnected) return;
+  if (failedRead(readErr)) { $("#main").innerHTML = signalCard(); return; }
   if (!ev) { $("#main").innerHTML = `<div class="panel empty"><h2>Event not found</h2></div>`; return; }
   let rs = (await getDocs(collection(db, "events", eid, "rsvps")).catch(() => ({ docs: [] }))).docs.map(d => ({ id: d.id, ...d.data() }));
   const invites = ev.access === "invite" ? (await getDocs(collection(db, "events", eid, "invites")).catch(() => ({ docs: [] }))).docs.map(d => ({ id: d.id, ...d.data() })) : [];
