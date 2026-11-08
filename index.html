@@ -813,6 +813,7 @@ async function builder(eid) {
   drawShare(); preview();
 
   window.onbeforeunload = () => dirty ? true : undefined;
+  leaveGuard = () => dirty;
   $("#save").onclick = async () => {
     if (!ev.title.trim()) { toast("Add an event name first"); $("#title").focus(); return; }
     ev.code = cleanCode(ev.code);
@@ -944,11 +945,13 @@ async function hostsPage() {
 }
 
 /* ---------- routing ---------- */
+// Hash links and the phone's Back never fire beforeunload, so the builder's unsaved edits need their own check.
+let leaveGuard = null, bouncing = false;
 async function route() {
   if (!S.user) return landing();
   if (S.role === "unverified") return verifyRoom();
   if (S.role === "blocked") return blockedRoom();
-  window.onbeforeunload = null;
+  window.onbeforeunload = null; leaveGuard = null;
   const h = location.hash.slice(1);
   if (h === "new") return builder(null);
   if (h.startsWith("edit/")) return builder(h.slice(5));
@@ -956,7 +959,12 @@ async function route() {
   if (h === "hosts" && S.role === "owner") return hostsPage();
   return dashboard();
 }
-window.addEventListener("hashchange", () => { if (!params.get("e")) route(); });
+window.addEventListener("hashchange", e => {
+  if (params.get("e")) return;
+  if (bouncing) { bouncing = false; return; }
+  if (leaveGuard && leaveGuard() && !confirm("You have unsaved changes. Leave without saving?")) { bouncing = true; location.hash = new URL(e.oldURL).hash; return; }
+  route();
+});
 if (!CFG.firebase || /PASTE/.test(CFG.firebase.apiKey || "")) {
   $("#app").innerHTML = `<div class="wrap"><div class="panel empty"><h2>Almost ready</h2><p class="muted">Add your Firebase settings to <b>config.js</b> (see the README), then reload.</p></div></div>`;
 } else if (params.get("e")) { guestView(params.get("e")); }
