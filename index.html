@@ -331,7 +331,7 @@ async function googleIn() {
     if (e.code !== "auth/popup-closed-by-user" && e.code !== "auth/cancelled-popup-request") toast("Sign-in didn't finish. Try again.");
   }
 }
-const AUTH_ERR = { "auth/invalid-credential": "That email and password don't match.", "auth/wrong-password": "That email and password don't match.", "auth/user-not-found": "That email and password don't match.", "auth/email-already-in-use": "That email already has an account. Sign in instead.", "auth/weak-password": "Use at least 6 characters for your password.", "auth/invalid-email": "Check that email address.", "auth/too-many-requests": "Too many tries. Wait a few minutes and try again." };
+const AUTH_ERR = { "auth/invalid-credential": "That email and password don't match.", "auth/wrong-password": "That email and password don't match.", "auth/user-not-found": "That email and password don't match.", "auth/email-already-in-use": "That email already has an account. Sign in instead.", "auth/weak-password": "Use at least 6 characters for your password.", "auth/invalid-email": "Check that email address.", "auth/too-many-requests": "Too many tries. Wait a few minutes and try again.", "auth/network-request-failed": "Can't reach Steele Events. Check your signal, then try again." };
 
 /* ---------- guest view: the invitation ---------- */
 const ICON = {
@@ -400,6 +400,8 @@ function wireIcs(root, ev, eid) {
 const signalCard = () => `<div class="panel empty"><h2>Can't reach Steele Events</h2><p class="muted">Check your signal, then try again.</p><button class="btn" type="button" onclick="location.reload()">Try again</button></div>`;
 // A dropped signal is not an answer. Only a refusal from the database means the thing isn't there for you.
 const failedRead = e => !!e && e.code !== "permission-denied";
+// With no signal, getDocs usually doesn't fail: it hands back an empty answer marked "from cache".
+const noAnswer = s => !s || (s.empty && s.metadata.fromCache);
 const NO_SIGNAL = "Can't reach Steele Events. Check your signal, then try again.";
 const unavailable = () => { $("#app").innerHTML = `<div class="wrap"><div class="panel empty"><h2>This invitation isn't available</h2><p class="muted">It may have been taken down, or the link is incomplete. Check with the host.</p><a class="btn" href="${esc(siteUrl())}${EMU ? "?emu" : ""}">Enter a code</a></div></div>`; };
 
@@ -583,13 +585,13 @@ function landing(mode = "in") {
       if (mode === "reset") { await sendPasswordResetEmail(auth, email); er.hidden = true; toast("If that email has an account, a reset link is on its way."); landing("in"); return; }
       if (mode === "up") { const c = await createUserWithEmailAndPassword(auth, email, pass); if (newName) await updateProfile(c.user, { displayName: newName }); await sendEmailVerification(c.user); }
       else await signInWithEmailAndPassword(auth, email, pass);
-    } catch (x) { if (mode === "reset") { toast("If that email has an account, a reset link is on its way."); landing("in"); } else fail(x); } };
+    } catch (x) { if (mode === "reset" && x.code !== "auth/network-request-failed") { toast("If that email has an account, a reset link is on its way."); landing("in"); } else fail(x); } };
 }
 function verifyRoom() {
   shell(`<div class="panel empty" style="max-width:560px;margin:30px auto"><h2>Check your email</h2>
     <p class="muted">We sent a link to <b>${esc(S.user.email)}</b>. Tap it so we know this address is yours, then come back here. Check spam if you don't see it.</p>
     <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap"><button class="btn primary" id="vDone">I clicked the link</button><button class="btn" id="vAgain">Send it again</button></div></div>`);
-  $("#vDone").onclick = async () => { await S.user.reload(); if (!S.user.emailVerified) return toast("Not verified yet. Tap the link in the email first."); await S.user.getIdToken(true); await loadRole(); route(); };
+  $("#vDone").onclick = async () => { try { await S.user.reload(); } catch { return toast(NO_SIGNAL); } if (!S.user.emailVerified) return toast("Not verified yet. Tap the link in the email first."); await S.user.getIdToken(true); await loadRole(); route(); };
   $("#vAgain").onclick = async () => { try { await sendEmailVerification(S.user); toast("Sent"); } catch { toast("Wait a minute, then try again."); } };
 }
 function blockedRoom() { shell(`<div class="panel empty" style="max-width:560px;margin:30px auto"><h2>Hosting is off for this account</h2><p class="muted">Contact the site owner if you think that's a mistake.</p></div>`); }
@@ -644,7 +646,10 @@ async function builder(eid) {
     if (failedRead(readErr)) { shell(signalCard()); return; }
     if (!full) { shell(`<div class="panel empty"><h2>Event not found</h2><a class="btn" href="#">Back to your events</a></div>`); return; }
     ev = full; isOwnerOfEvent = ev.ownerUid === S.user.uid || S.role === "owner";
-    const iv = await getDocs(collection(db, "events", eid, "invites")).catch(() => null); invites = iv ? iv.docs.map(d => ({ id: d.id, ...d.data() })) : [];
+    // A missed list would leave every personal link on the old code if the host then changes it.
+    const iv = await getDocs(collection(db, "events", eid, "invites")).catch(() => null);
+    if (noAnswer(iv)) { shell(signalCard()); return; }
+    invites = iv.docs.map(d => ({ id: d.id, ...d.data() }));
   } else { const n = S.user.displayName; if (n) ev.hostName = n; }
   const savedCode = eid ? ev.code : null;
   const dl = deadlineDate(ev); const dlLocal = dl ? new Date(dl.getTime() - dl.getTimezoneOffset() * 60000).toISOString().slice(0, 16) : "";
@@ -837,8 +842,10 @@ async function builder(eid) {
     if (ev.reminders.on && !ev.date) { toast("Add a date so reminders know when to send"); return; }
     const badLink = (ev.wishlist || []).find(w => w.url && !safeUrl(w.url));
     if (badLink) { toast(`Check the link for "${badLink.title || "your wishlist item"}". It should start with https://`); return; }
+    if (navigator.onLine === false) { toast(NO_SIGNAL); return; }
     const btn = $("#save"); btn.disabled = true; btn.textContent = "Saving…";
-    const restore = () => { btn.disabled = false; btn.textContent = "Save"; };
+    // With no signal a save doesn't fail, it waits and finishes when the signal is back. Say so.
+    let slow = 0; const restore = () => { clearTimeout(slow); btn.disabled = false; btn.textContent = "Save"; };
     const codeChanged = ev.code !== savedCodeNow;
     if (codeChanged) { const t = await getDoc(doc(db, "codes", ev.code)).catch(() => null); if (t && t.exists()) { restore(); toast("That code is taken. Try another."); return; } }
     const dlv = ev.deadline ? Timestamp.fromDate(ev.deadline instanceof Date ? ev.deadline : deadlineDate(ev)) : null;
@@ -856,7 +863,8 @@ async function builder(eid) {
       if (!eid) b.set(doc(db, "events", id, "meta", "count"), { yes: 0 });
       if (codeChanged) { b.set(doc(db, "codes", ev.code), { e: id }); if (savedCodeNow) { b.delete(doc(db, "codes", savedCodeNow)); b.delete(doc(db, "events", id, "locked", savedCodeNow)); }
         invites.forEach(iv => b.update(doc(db, "events", id, "invites", iv.id), { code: ev.code })); }
-      await b.commit();
+      slow = setTimeout(() => { btn.textContent = "Waiting for signal…"; }, 8000);
+      await b.commit(); clearTimeout(slow);
       dirty = false; window.onbeforeunload = null;
       if (!eid) { toast("Event created"); location.hash = "#edit/" + id; return; }
       savedCodeNow = ev.code; savedAccess = ev.access; $("#dirty").textContent = "Saved"; drawShare(); drawAccess(); toast(ev.published ? "Saved. Your invitation is live." : "Saved as a draft");
@@ -903,9 +911,13 @@ async function responses(eid) {
   if (!here.isConnected) return;
   if (failedRead(readErr)) { $("#main").innerHTML = signalCard(); return; }
   if (!ev) { $("#main").innerHTML = `<div class="panel empty"><h2>Event not found</h2></div>`; return; }
-  let rs = (await getDocs(collection(db, "events", eid, "rsvps")).catch(() => ({ docs: [] }))).docs.map(d => ({ id: d.id, ...d.data() }));
-  const invites = ev.access === "invite" ? (await getDocs(collection(db, "events", eid, "invites")).catch(() => ({ docs: [] }))).docs.map(d => ({ id: d.id, ...d.data() })) : [];
+  const rsSnap = await getDocs(collection(db, "events", eid, "rsvps")).catch(() => null);
+  const invSnap = ev.access === "invite" ? await getDocs(collection(db, "events", eid, "invites")).catch(() => null) : { docs: [], empty: true, metadata: {} };
   if (!here.isConnected) return;
+  // "No RSVPs yet" must only ever mean that.
+  if (noAnswer(rsSnap) || noAnswer(invSnap)) { $("#main").innerHTML = signalCard(); return; }
+  let rs = rsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const invites = invSnap.docs.map(d => ({ id: d.id, ...d.data() }));
   let tab = "all", search = "";
   function draw() {
     rs.sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0));
@@ -951,7 +963,7 @@ async function responses(eid) {
 /* ---------- site owner: who's hosting ---------- */
 async function hostsPage() {
   shell(`<div class="dh"><div><h1>Hosts</h1><p class="muted" style="margin:4px 0 0">Anyone with a verified email can host. Block an account if it's misused.</p></div><a class="btn" href="#">← Your events</a></div><div id="hl" class="panel"><p class="muted">Loading…</p></div>`);
-  const hl = $("#hl"); const s = await getDocs(collection(db, "hosts")).catch(() => null); if (!hl.isConnected) return; const hs = s ? s.docs.map(d => ({ id: d.id, ...d.data() })) : [];
+  const hl = $("#hl"); const s = await getDocs(collection(db, "hosts")).catch(() => null); if (!hl.isConnected) return; if (noAnswer(s)) { hl.innerHTML = signalCard(); return; } const hs = s.docs.map(d => ({ id: d.id, ...d.data() }));
   hs.sort((a, b) => (a.status === "blocked") - (b.status === "blocked") || String(a.email).localeCompare(b.email));
   $("#hl").innerHTML = hs.length ? `<div class="tablewrap" style="border:0"><table class="invtable"><thead><tr><th>Name</th><th>Email</th><th>Status</th><th></th></tr></thead><tbody>${hs.map(h => `<tr><td>${esc(h.name)}</td><td>${esc(h.email)}</td><td><span class="pill ${h.status === "blocked" ? "draft" : "live"}">${esc(h.status)}</span></td>
     <td style="text-align:right">${h.status === "blocked" ? `<button class="btn small" data-ok="${esc(h.id)}">Unblock</button>` : `<button class="btn small danger" data-no="${esc(h.id)}">Block</button>`}</td></tr>`).join("")}</tbody></table></div>`
