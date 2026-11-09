@@ -445,7 +445,12 @@ async function guestView(eid) {
     store.set("code:" + eid, code);
     rsvpId = invite ? inviteId : (rsvpId || store.get("rsvp:" + eid));
     let existing = null;
-    if (rsvpId) { const r = await getDoc(doc(db, "events", eid, "rsvps", rsvpId)).catch(() => null); if (r && r.exists()) existing = r.data(); else if (!invite) rsvpId = null; }
+    if (rsvpId) {
+      // A failed read is not "no RSVP": a blank form here would make a second RSVP and count the group twice.
+      let rsvpErr = null; const r = await getDoc(doc(db, "events", eid, "rsvps", rsvpId)).catch(e => { rsvpErr = e; return null; });
+      if (failedRead(rsvpErr)) { app.innerHTML = `<div class="wrap">${signalCard()}</div>`; return; }
+      if (r && r.exists()) existing = r.data(); else if (!invite) rsvpId = null;
+    }
     const countSnap = await getDoc(doc(db, "events", eid, "meta", "count")).catch(() => null);
     let yes = countSnap && countSnap.exists() ? countSnap.data().yes : 0;
 
