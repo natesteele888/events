@@ -30,7 +30,9 @@ jobs:
         env:
           EVENTS_ROOT: ${{ github.workspace }}
           TZ: America/New_York
-        run: npx firebase emulators:exec --only firestore,auth --project demo-events "node e2e.mjs"
+        run: |
+          cp ../firebase.json ../firestore.rules .
+          npx firebase emulators:exec --only firestore,auth --project demo-events "node e2e.mjs"
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: screenshots, path: /tmp/events-shots/*.png, retention-days: 3 }
