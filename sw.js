@@ -1,5 +1,5 @@
 // Network first: updates show right away; the saved copy is only for offline.
-const CACHE = "events-v12";
+const CACHE = "events-v13";
 // Save the page itself at install. Without this, the first visit caches nothing
 // (the page loaded before the worker existed), so opening it offline right after
 // installing fails. Each file is added on its own so one miss can't block install.
