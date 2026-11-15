@@ -13,7 +13,7 @@ if (location.hostname.endsWith("github.io")) location.replace("https://steele-ev
 <!-- Fonts load without holding up the page; until they arrive (or if they never do) the system fonts show. -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700;800&family=Permanent+Marker&family=Bebas+Neue&family=Pacifico&family=Fraunces:opsz,wght@9..144,600;9..144,800&display=swap" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700;800&family=Permanent+Marker&family=Bebas+Neue&family=Pacifico&family=Fraunces:opsz,wght@9..144,600;9..144,800&display=swap"></noscript>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" async></script>
+<script id="qrlib" src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" async onerror="this.dataset.failed=1"></script>
 <link rel="manifest" href="manifest.json">
 <script src="https://natesteele888.github.io/apps/install.js" defer></script>
 <script src="https://natesteele888.github.io/apps/health.js" defer></script>
@@ -290,7 +290,8 @@ const siteUrl = () => location.origin + location.pathname;
 const emuQ = () => EMU ? "&emu" : "";
 const guestUrl = (e, extra = "") => `${siteUrl()}?e=${encodeURIComponent(e)}${extra}${emuQ()}`;
 const WORDS = "TIGER LION EAGLE HAWK BEAR WOLF FOX OTTER PANDA ROBIN FALCON BISON MOOSE SHARK WHALE ACORN MAPLE CEDAR RIVER OCEAN STORM THUNDER COMET ROCKET PLANET STAR SUNNY SPARK EMBER FROST BERRY PEACH MANGO LEMON WAFFLE COOKIE TACO PIZZA BAGEL DONUT BANJO DRUM TRUMPET GUITAR KAZOO PIRATE WIZARD KNIGHT ROBOT DRAGON UNICORN CASTLE ISLAND CANYON MEADOW".split(" ");
-const newCode = () => { const a = new Uint32Array(2); crypto.getRandomValues(a); return WORDS[a[0] % WORDS.length] + (100 + a[1] % 900); };
+// Word + 4 digits: about 500,000 possible codes, still easy to read out and type.
+const newCode = () => { const a = new Uint32Array(2); crypto.getRandomValues(a); return WORDS[a[0] % WORDS.length] + (1000 + a[1] % 9000); };
 const cleanCode = s => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
 function fmtDate(ev) {
@@ -823,7 +824,7 @@ async function builder(eid) {
     document.querySelectorAll("[data-qr]").forEach(x => x.onchange = () => { ev.questions[+x.dataset.qr].required = x.checked; changed(); });
     document.querySelectorAll("[data-qx]").forEach(x => x.onclick = () => { ev.questions.splice(+x.dataset.qx, 1); drawQs(); changed(); });
   }
-  $("#addQ").onclick = () => { ev.questions = [...(ev.questions || []), { id: "q" + rid(6), label: "", type: "choice", options: [], required: false }]; drawQs(); changed(); };
+  $("#addQ").onclick = () => { if ((ev.questions || []).length >= 30) return toast("30 questions is the most an event can have."); ev.questions = [...(ev.questions || []), { id: "q" + rid(6), label: "", type: "choice", options: [], required: false }]; drawQs(); changed(); };
   drawQs();
 
   // co-hosts
@@ -905,7 +906,12 @@ function wireShare(eid, ev, root) {
   const c = root.querySelector("#cpy"); if (!c) return; c.onclick = () => copy(link);
   root.querySelector("#cpyMsg").onclick = () => copy(`You're invited to ${ev.title}!${ev.date ? " " + fmtDate(ev) + "." : ""}\nRSVP here: ${link}${showCode ? `\nAccess code: ${ev.code}` : ""}`);
   const qr = root.querySelector("#qr");
-  try { if (window.QRCode) new QRCode(qr, { text: link, width: 240, height: 240, colorDark: "#14224F", colorLight: "#ffffff" }); else qr.hidden = true; } catch { qr.hidden = true; }
+  // The QR library loads in the background. If it hasn't arrived yet (slow signal), draw once it does instead of giving up.
+  const draw = () => { if (!qr.isConnected) return; try { new QRCode(qr, { text: link, width: 240, height: 240, colorDark: "#14224F", colorLight: "#ffffff" }); qr.hidden = false; } catch { qr.hidden = true; } };
+  const lib = document.getElementById("qrlib");
+  qr.hidden = true;
+  if (window.QRCode) draw();
+  else if (lib && !lib.dataset.failed) lib.addEventListener("load", draw, { once: true });
 }
 
 /* ---------- guest list: the host's back end ---------- */

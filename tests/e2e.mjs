@@ -37,7 +37,7 @@ await h.click("#vDone"); await h.waitForSelector("text=Your events"); check("ver
 
 console.log("Host builds the event");
 await h.click("text=＋ New event"); await h.waitForSelector("#title");
-const code = await h.inputValue("#code"); check("access code auto-generated", /^[A-Z]+\d{3}$/.test(code), code);
+const code = await h.inputValue("#code"); check("access code auto-generated", /^[A-Z]+\d{4}$/.test(code), code);
 const d = new Date(Date.now() + 6 * 3600e3); const ds = d.toISOString().slice(0, 10);
 await h.fill("#title", "Backyard Bash"); await h.fill("#subtitle", "You're invited"); await h.fill("#date", ds); await h.fill("#start", d.toISOString().slice(11, 16)); await h.fill("#location", "Our house"); await h.fill("#address", "1 Main St, Town"); await h.fill("#description", "Bring a chair."); 
 check("host name filled from account", await h.inputValue("#hostName") === "Pat Host");
@@ -55,6 +55,16 @@ await h.click("#save"); await h.waitForFunction(() => location.hash.startsWith("
 const eid = h.url().split("#edit/")[1]; check("event saved and share box shows", !!eid);
 const shareText = await h.locator("#sharebox").innerText(); check("share box shows the code", shareText.includes(code));
 await shot(h, "2-builder", true);
+{ // On a slow signal the QR library arrives after the share box is drawn. The QR should still show up.
+  const slow = watch(await hc.newPage());
+  await slow.route(/cdnjs\.cloudflare\.com.*qrcode/, async r => { await new Promise(res => setTimeout(res, 5000)); await r.fulfill({ contentType: "text/javascript", body: fs.readFileSync(`${CDN}/qrcodejs/qrcode.min.js`) }); });
+  await slow.goto(`${B}#edit/${eid}`); await slow.waitForSelector("#sharebox .linkbox");
+  const early = await slow.evaluate(() => !window.QRCode); // the library is still on its way
+  check("no empty QR box while its library is still loading", !early || await slow.locator("#qr").isHidden());
+  await slow.waitForSelector("#qr img, #qr canvas", { timeout: 12000 }).catch(() => {});
+  check("QR shows once a slow library arrives", await slow.locator("#qr").isVisible() && await slow.locator("#qr img, #qr canvas").count() > 0);
+  await slow.close();
+}
 
 console.log("Guest: wrong and right code");
 const gc = await ctx(phone); const g = watch(await gc.newPage());

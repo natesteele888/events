@@ -36,6 +36,7 @@ await env.withSecurityRulesDisabled(async c => { const f = c.firestore();
     const e = ev(o); await setDoc(doc(f, `events/${id}`), e); await setDoc(doc(f, `events/${id}/public/card`), card()); await setDoc(doc(f, `events/${id}/locked/${e.code}`), { location: "x" });
     await setDoc(doc(f, `events/${id}/meta/count`), { yes: id === "full" ? 2 : 0 }); await setDoc(doc(f, `codes/${e.code}`), { e: id });
   }
+  await setDoc(doc(f, "events/draft/invites/inv_d"), { name: "D", code: "DRAFT1" });
   await setDoc(doc(f, "hosts/u_bad"), { email: "bad@example.com", status: "blocked" });
   { const e = ev({ ownerUid: "u_bad", code: "BADEV1" }); await setDoc(doc(f, "events/bev"), e); await setDoc(doc(f, "events/bev/public/card"), card()); await setDoc(doc(f, `events/bev/locked/${e.code}`), { location: "x" }); await setDoc(doc(f, `codes/${e.code}`), { e: "bev" }); }
   await setDoc(doc(f, "events/late/rsvps/r_late"), { name: "L", attending: false, partySize: 0, email: "l@example.com", remind: true, code: "LATE11", updatedAt: 1 });
@@ -144,6 +145,24 @@ await ok("guest opens their invite", getDoc(doc(guest, "events/inv/invites/inv_a
 await no("guest cannot list invites", getDocs(collection(guest, "events/inv/invites")));
 await ok("invited guest RSVPs", send(guest, "inv", "inv_abc", (({ code, ...x }) => x)(rsvp({ inviteId: "inv_abc" })), 2));
 await no("knowing the code isn't enough for invite-only", send(guest, "inv", "rand", rsvp({ code: "INVITE123456", inviteId: "rand" }), 4));
+
+console.log("Guests stay inside their own event and their own RSVP");
+const many = n => Object.fromEntries(Array.from({ length: n }, (_, i) => ["q" + i, "a"]));
+await no("one event's code doesn't open another event", getDoc(doc(guest, "events/full/locked/LION77")));
+await no("guest cannot RSVP to a draft", send(guest, "draft", "rDr", rsvp({ code: "DRAFT1" }), 2));
+await no("guest cannot read a draft's invite", getDoc(doc(guest, "events/draft/invites/inv_d")));
+await no("guest cannot move their RSVP to another code", send(guest, "e1", "r_sam", rsvp({ attending: false, partySize: 0, code: "FULL11" }), 1));
+await no("guest cannot turn their RSVP into someone's invite", send(guest, "e1", "r_sam", rsvp({ attending: false, partySize: 0, inviteId: "inv_abc" }), 1));
+await no("an invite link only answers for its own invite", send(guest, "inv", "inv_zzz", (({ code, ...x }) => x)(rsvp({ inviteId: "inv_abc" })), 4));
+await no("guest cannot add an invite", setDoc(doc(guest, "events/inv/invites/inv_new"), { name: "Me", code: "INVITE123456" }));
+await no("guest cannot change the look", setDoc(doc(guest, "events/e1/public/card"), card({ title: "Ad" })));
+await no("guest cannot change the details", setDoc(doc(guest, "events/e1/locked/LION77"), { location: "Elsewhere" }));
+await no("guest cannot write other event data", setDoc(doc(guest, "events/e1/meta/other"), { yes: 0 }));
+await no("guest cannot read the host directory", getDoc(doc(guest, "hosts/u_x")));
+await ok("RSVP with 30 answers accepted", send(guest, "e1", "r_30", rsvp({ name: "Q", attending: false, partySize: 0, answers: many(30) }), 1));
+await no("RSVP stuffed with more than 30 answers rejected", send(guest, "e1", "r_31", rsvp({ name: "Q", attending: false, partySize: 0, answers: many(31) }), 1));
+await ok("event with 30 questions accepted", setDoc(doc(host, "events/e1/locked/LION77"), { location: "Secret place", questions: Array(30).fill({ id: "q", label: "x" }) }));
+await no("more than 30 questions rejected", setDoc(doc(host, "events/e1/locked/LION77"), { location: "Secret place", questions: Array(31).fill({ id: "q", label: "x" }) }));
 
 console.log("Clean-up rights");
 await no("guest cannot delete an RSVP", deleteDoc(doc(guest, "events/e1/rsvps/r_sam")));

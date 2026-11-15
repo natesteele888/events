@@ -43,6 +43,7 @@ codes/TIGER42              → points to abc123, so a guest can just type the co
 ```
 
 A simple code keeps out casual visitors, not a determined attacker, because the database has no limit on guesses.
+New codes are a word plus four digits (about 500,000 possibilities), which makes guessing slower but not impossible.
 Use **Invite list** for anything sensitive: each guest gets a long private link.
 
 ## Files
