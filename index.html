@@ -16,6 +16,7 @@ if (location.hostname.endsWith("github.io")) location.replace("https://steele-ev
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" async></script>
 <link rel="manifest" href="manifest.json">
 <script src="https://natesteele888.github.io/apps/install.js" defer></script>
+<script src="https://natesteele888.github.io/apps/health.js" defer></script>
 <meta name="theme-color" content="#1D3FD1">
 <link rel="icon" href="icon-192.png">
 <script src="config.js"></script>
@@ -52,6 +53,8 @@ a{color:var(--brand)}
 .btn.small{padding:4px 10px;font-size:13px;min-height:36px}
 .btn:disabled{opacity:.55;cursor:default}
 .muted{color:var(--muted)}
+.helpfoot{text-align:center;margin:28px 0 8px}
+.helpfoot button{background:none;border:0;color:var(--muted);font:inherit;font-size:14px;text-decoration:underline;min-height:44px;padding:0 12px;cursor:pointer}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-size:14px;z-index:50;max-width:calc(100% - 32px)}
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px}
 .empty{text-align:center;padding:40px 20px}
@@ -276,7 +279,7 @@ if (EMU) { connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings:
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const rid = (n = 20) => { const a = new Uint8Array(n); crypto.getRandomValues(a); return [...a].map(x => "abcdefghijkmnpqrstuvwxyz23456789"[x % 32]).join(""); };
-function toast(m) { const t = document.createElement("div"); t.className = "toast"; t.textContent = m; document.body.appendChild(t); setTimeout(() => t.remove(), 2600); }
+function toast(m) { if (window.nateHealth && /couldn|can\u2019t|can't|signal|failed/i.test(m)) window.nateHealth.note("save", m); const t = document.createElement("div"); t.className = "toast"; t.textContent = m; document.body.appendChild(t); setTimeout(() => t.remove(), 2600); }
 async function copy(text) { try { await navigator.clipboard.writeText(text); toast("Copied"); } catch { prompt("Copy this:", text); } }
 // Hosts are anyone with an email, and this page shares an origin with other apps, so nothing a host types
 // reaches the page unchecked: images and colors must match exactly, links must be http(s).
@@ -549,7 +552,7 @@ async function guestView(eid) {
 function shell(inner) {
   const u = S.user;
   $("#app").innerHTML = `<div class="wrap"><header class="top"><a class="brandmark" href="#">${esc(CFG.appName || "Steele Events").replace(/ (\w+)$/, ' <span>$1</span>')}</a>
-    <div class="who">${u ? `${S.role === "owner" ? '<a class="btn small" href="#hosts">Hosts</a>' : ""}<span>${esc(u.email)}</span><button class="btn small" id="out">Sign out</button>` : ""}</div></header><main id="main">${inner}</main></div>`;
+    <div class="who">${u ? `${S.role === "owner" ? '<a class="btn small" href="#hosts">Hosts</a>' : ""}<span>${esc(u.email)}</span><button class="btn small" id="out">Sign out</button>` : ""}</div></header><main id="main">${inner}</main><p class="helpfoot"><button type="button" onclick="window.nateHealth&&nateHealth.report()">Something wrong? Send a report</button></p></div>`;
   const o = $("#out"); if (o) o.onclick = () => signOut(auth);
 }
 function landing(mode = "in") {
