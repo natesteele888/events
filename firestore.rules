@@ -101,7 +101,8 @@ service cloud.firestore {
       match /locked/{k} {
         allow get: if (ev(e).published == true && k == ev(e).code) || isEventAdmin(e);
         allow create, update: if adminAfter(e) && ownerNotBlocked(getAfter(eventPath(e)).data) && k == getAfter(eventPath(e)).data.code
-          && (!('wishlist' in request.resource.data) || request.resource.data.wishlist.size() <= 40);
+          && (!('wishlist' in request.resource.data) || request.resource.data.wishlist.size() <= 40)
+          && (!('questions' in request.resource.data) || request.resource.data.questions.size() <= 30);
         allow delete: if isEventAdmin(e);
       }
 
@@ -150,7 +151,7 @@ service cloud.firestore {
             && x.partySize is int
             && (x.attending == false || (x.partySize >= 1 && x.partySize <= d.plusMax + 1))
             && x.get('note', '') is string && x.get('note', '').size() <= 1000
-            && x.get('answers', {}) is map
+            && x.get('answers', {}) is map && x.get('answers', {}).size() <= 30
             && x.get('email', '') is string && x.get('email', '').size() <= 254
             && (x.get('remind', false) == false || x.get('email', '').matches('^[^@ ]+@[^@ ]+[.][^@ ]+$'))
             && x.keys().hasOnly(['name', 'attending', 'partySize', 'answers', 'note', 'email', 'remind', 'code', 'inviteId', 'createdAt', 'updatedAt']);
