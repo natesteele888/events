@@ -648,12 +648,16 @@ const loadFull = async eid => {
 async function builder(eid) {
   let ev = blankEvent(), isOwnerOfEvent = true, invites = [];
   if (eid) {
+    // Show the tap worked, and never paint the editor over a page the host moved to while it loaded.
+    shell(`<div class="panel empty"><p class="muted">Loading your event…</p></div>`); const here = $("#main");
     let readErr = null; const full = await loadFull(eid).catch(e => { readErr = e; return null; });
+    if (!here.isConnected) return;
     if (failedRead(readErr)) { shell(signalCard()); return; }
     if (!full) { shell(`<div class="panel empty"><h2>Event not found</h2><a class="btn" href="#">Back to your events</a></div>`); return; }
     ev = full; isOwnerOfEvent = ev.ownerUid === S.user.uid || S.role === "owner";
     // A missed list would leave every personal link on the old code if the host then changes it.
     const iv = await getDocs(collection(db, "events", eid, "invites")).catch(() => null);
+    if (!here.isConnected) return;
     if (noAnswer(iv)) { shell(signalCard()); return; }
     invites = iv.docs.map(d => ({ id: d.id, ...d.data() }));
   } else { const n = S.user.displayName; if (n) ev.hostName = n; }
