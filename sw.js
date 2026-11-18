@@ -1,5 +1,5 @@
 // Network first: updates show right away; the saved copy is only for offline.
-const CACHE = "events-v17";
+const CACHE = "events-v18";
 // Save the page itself at install. Without this, the first visit caches nothing
 // (the page loaded before the worker existed), so opening it offline right after
 // installing fails. Each file is added on its own so one miss can't block install.
@@ -13,8 +13,19 @@ self.addEventListener("activate", e => e.waitUntil(caches.keys().then(ks => Prom
 self.addEventListener("fetch", e => {
   // Same-origin only, so Firebase traffic is never touched and guest data is never cached.
   if (e.request.method !== "GET" || new URL(e.request.url).origin !== location.origin) return;
-  e.respondWith(fetch(e.request).then(res => {
-    if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); }
-    return res;
-  }).catch(() => caches.match(e.request, { ignoreSearch: true })));
+  const r = e.request;
+  const saved = () => caches.match(r, { ignoreSearch: true });
+  const net = fetch(r);
+  // Refresh the saved copy from the network's answer. waitUntil is called now, while the event runs: a call made
+  // later, after the saved copy has already gone out, can be refused and the copy would never refresh.
+  e.waitUntil(net.then(res => { if (res.ok) { const copy = res.clone(); return caches.open(CACHE).then(c => c.put(r, copy)); } }, () => {}));
+  // One weak bar of signal: a fetch can hang a long time without failing. After 3 seconds the saved copy shows
+  // instead (if there is one); with nothing saved, keep waiting for the network.
+  e.respondWith(new Promise(resolve => {
+    let done = false;
+    const give = res => { if (!done && res) { done = true; resolve(res); } };
+    const t = setTimeout(() => saved().then(give), 3000);
+    net.then(res => { clearTimeout(t); give(res); },
+      () => { clearTimeout(t); saved().then(m => { give(m); if (!done) { done = true; resolve(Response.error()); } }); });
+  }));
 });
