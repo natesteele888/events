@@ -963,7 +963,8 @@ async function responses(eid) {
       // A leading = + - @ makes spreadsheets run a cell as a formula, and guests type these cells.
       const cell = v => { let s = String(v ?? ""); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return `"${s.replace(/"/g, '""')}"`; };
       const rows = [["Name", "Coming", "Group size", ...qs.map(q => q.label), "Comment", "Email", "Reminders"], ...rs.map(r => [r.name, r.attending ? "Yes" : "No", r.attending ? r.partySize : 0, ...qs.map(q => r.answers?.[q.id] ?? ""), r.note || "", r.email || "", r.remind ? "Yes" : "No"])];
-      const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([rows.map(r => r.map(cell).join(",")).join("\n")], { type: "text/csv" })); a.download = (ev.title || "guests").replace(/[^\w]+/g, "-") + "-guests.csv"; a.click();
+      const a = document.createElement("a"); // The \uFEFF mark tells Excel the file is UTF-8, so accents and emoji in names and answers read right.
+      a.href = URL.createObjectURL(new Blob(["\uFEFF" + rows.map(r => r.map(cell).join(",")).join("\n")], { type: "text/csv;charset=utf-8" })); a.download = (ev.title || "guests").replace(/[^\w]+/g, "-") + "-guests.csv"; a.click();
     };
     document.querySelectorAll("[data-rdel]").forEach(b => { let armed = false; b.onclick = async () => {
       if (!armed) { armed = true; b.textContent = "Tap again"; setTimeout(() => { armed = false; b.textContent = "Remove"; }, 4000); return; }
